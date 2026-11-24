@@ -1,0 +1,345 @@
+{
+  "Version": "1.0",
+  "Apps": [
+    {
+      "Id": "chrome",
+      "Name": "Google Chrome",
+      "Category": "Navegadores",
+      "Description": "Navegador rapido de Google",
+      "Source": "winget",
+      "Target": "Google.Chrome",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "firefox",
+      "Name": "Mozilla Firefox",
+      "Category": "Navegadores",
+      "Description": "Navegador libre y enfocado en privacidad",
+      "Source": "winget",
+      "Target": "Mozilla.Firefox",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "brave",
+      "Name": "Brave Browser",
+      "Category": "Navegadores",
+      "Description": "Navegador con bloqueador integrado",
+      "Source": "winget",
+      "Target": "Brave.Brave",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "operagx",
+      "Name": "Opera GX",
+      "Category": "Navegadores",
+      "Description": "Navegador disenado para gaming",
+      "Source": "winget",
+      "Target": "Opera.OperaGX",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "7zip",
+      "Name": "7-Zip",
+      "Category": "Utilidades",
+      "Description": "Compresor de archivos ligero y libre",
+      "Source": "winget",
+      "Target": "7zip.7zip",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "winrar",
+      "Name": "WinRAR",
+      "Category": "Utilidades",
+      "Description": "Compresor clasico RAR y ZIP",
+      "Source": "winget",
+      "Target": "RARLab.WinRAR",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "everything",
+      "Name": "Everything",
+      "Category": "Utilidades",
+      "Description": "Buscador instantaneo de archivos",
+      "Source": "winget",
+      "Target": "voidtools.Everything",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "powertoys",
+      "Name": "Microsoft PowerToys",
+      "Category": "Utilidades",
+      "Description": "Suite oficial de utilidades para Windows",
+      "Source": "winget",
+      "Target": "Microsoft.PowerToys",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "rufus",
+      "Name": "Rufus",
+      "Category": "Utilidades",
+      "Description": "Crea memorias USB booteables",
+      "Source": "winget",
+      "Target": "Rufus.Rufus",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "crystaldisk",
+      "Name": "CrystalDiskInfo",
+      "Category": "Utilidades",
+      "Description": "Diagnostico de salud de discos SSD/HDD",
+      "Source": "winget",
+      "Target": "CrystalDewWorld.CrystalDiskInfo",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "cpuz",
+      "Name": "CPU-Z",
+      "Category": "Utilidades",
+      "Description": "Informacion detallada del hardware",
+      "Source": "winget",
+      "Target": "CPUID.CPU-Z",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "treesize",
+      "Name": "TreeSize Free",
+      "Category": "Utilidades",
+      "Description": "Analiza el espacio ocupado en disco",
+      "Source": "winget",
+      "Target": "JAMSoftware.TreeSize.Free",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vlc",
+      "Name": "VLC Media Player",
+      "Category": "Multimedia",
+      "Description": "Reproductor universal de video y audio",
+      "Source": "winget",
+      "Target": "VideoLAN.VLC",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "spotify",
+      "Name": "Spotify",
+      "Category": "Multimedia",
+      "Description": "Musica y podcasts en streaming",
+      "Source": "winget",
+      "Target": "Spotify.Spotify",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "obs",
+      "Name": "OBS Studio",
+      "Category": "Multimedia",
+      "Description": "Grabacion de pantalla y streaming",
+      "Source": "winget",
+      "Target": "OBSProject.OBSStudio",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "sharex",
+      "Name": "ShareX",
+      "Category": "Multimedia",
+      "Description": "Capturas de pantalla y GIFs avanzados",
+      "Source": "winget",
+      "Target": "ShareX.ShareX",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "gimp",
+      "Name": "GIMP",
+      "Category": "Multimedia",
+      "Description": "Editor de imagenes gratuito",
+      "Source": "winget",
+      "Target": "GIMP.GIMP.3",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "paintnet",
+      "Name": "Paint.NET",
+      "Category": "Multimedia",
+      "Description": "Editor de imagenes rapido y ligero",
+      "Source": "winget",
+      "Target": "dotPDN.PaintDotNet",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "discord",
+      "Name": "Discord",
+      "Category": "Comunicacion",
+      "Description": "Chat de voz, video y comunidades",
+      "Source": "winget",
+      "Target": "Discord.Discord",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "telegram",
+      "Name": "Telegram Desktop",
+      "Category": "Comunicacion",
+      "Description": "Mensajeria rapida en la nube",
+      "Source": "winget",
+      "Target": "Telegram.TelegramDesktop",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "zoom",
+      "Name": "Zoom Workplace",
+      "Category": "Comunicacion",
+      "Description": "Videollamadas y reuniones online",
+      "Source": "winget",
+      "Target": "Zoom.Zoom",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "libreoffice",
+      "Name": "LibreOffice",
+      "Category": "Oficina",
+      "Description": "Suite ofimatica gratuita completa",
+      "Source": "winget",
+      "Target": "TheDocumentFoundation.LibreOffice",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "sumatrapdf",
+      "Name": "SumatraPDF",
+      "Category": "Oficina",
+      "Description": "Lector de PDF ultra rapido",
+      "Source": "winget",
+      "Target": "SumatraPDF.SumatraPDF",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "adobereader",
+      "Name": "Adobe Acrobat Reader",
+      "Category": "Oficina",
+      "Description": "Lector oficial de documentos PDF",
+      "Source": "winget",
+      "Target": "Adobe.Acrobat.Reader.64-bit",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "obsidian",
+      "Name": "Obsidian",
+      "Category": "Oficina",
+      "Description": "Notas personales en Markdown",
+      "Source": "winget",
+      "Target": "Obsidian.Obsidian",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vscode",
+      "Name": "Visual Studio Code",
+      "Category": "Desarrollo",
+      "Description": "Editor de codigo moderno de Microsoft",
+      "Source": "winget",
+      "Target": "Microsoft.VisualStudioCode",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "git",
+      "Name": "Git",
+      "Category": "Desarrollo",
+      "Description": "Control de versiones distribuido",
+      "Source": "winget",
+      "Target": "Git.Git",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "notepadpp",
+      "Name": "Notepad++",
+      "Category": "Desarrollo",
+      "Description": "Editor de texto ligero y rapido",
+      "Source": "winget",
+      "Target": "Notepad++.Notepad++",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "python",
+      "Name": "Python 3.12",
+      "Category": "Desarrollo",
+      "Description": "Lenguaje de programacion Python",
+      "Source": "winget",
+      "Target": "Python.Python.3.12",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "nodejs",
+      "Name": "Node.js LTS",
+      "Category": "Desarrollo",
+      "Description": "Entorno de ejecucion JavaScript",
+      "Source": "winget",
+      "Target": "OpenJS.NodeJS.LTS",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "steam",
+      "Name": "Steam",
+      "Category": "Juegos",
+      "Description": "Plataforma principal de videojuegos PC",
+      "Source": "winget",
+      "Target": "Valve.Steam",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "epic",
+      "Name": "Epic Games Launcher",
+      "Category": "Juegos",
+      "Description": "Tienda y lanzador de Epic Games",
+      "Source": "winget",
+      "Target": "EpicGames.EpicGamesLauncher",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist",
+      "Name": "Visual C++ 2015-2022 x64",
+      "Category": "Runtimes",
+      "Description": "Librerias esenciales para apps y juegos",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2015+.x64",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "dotnet8",
+      "Name": ".NET Desktop Runtime 8",
+      "Category": "Runtimes",
+      "Description": "Runtime para aplicaciones modernas .NET",
+      "Source": "winget",
+      "Target": "Microsoft.DotNet.DesktopRuntime.8",
+      "SilentArgs": "",
+      "Essential": false
+    }
+  ]
+}
