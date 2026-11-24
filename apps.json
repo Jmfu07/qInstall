@@ -162,6 +162,26 @@
       "Essential": false
     },
     {
+      "Id": "revios_setup",
+      "Name": "ReviOS (AME Wizard + Playbook)",
+      "Category": "Optimizacion",
+      "Description": "Descarga AME Wizard oficial, abre descarga del Playbook ReviOS y lo lanza",
+      "Source": "powershell",
+      "Target": "$dir = Join-Path $env:USERPROFILE 'Desktop\\ReviOS_Setup'; New-Item -ItemType Directory -Path $dir -Force | Out-Null; $zip = Join-Path $dir 'AME_Wizard.zip'; Write-Host 'Descargando AME Wizard oficial...' -ForegroundColor Cyan; Invoke-WebRequest 'https://download.ameliorated.io/AME%20Wizard%20Beta.zip' -OutFile $zip -UseBasicParsing; Expand-Archive -Path $zip -DestinationPath $dir -Force; Remove-Item $zip -Force; Write-Host 'Abriendo descarga oficial del Playbook ReviOS (revi.cc)...' -ForegroundColor Green; Start-Process 'https://revi.cc/revios/download'; $exe = Get-ChildItem -Path $dir -Filter '*AME*.exe' | Select-Object -First 1; if ($exe) { Start-Process $exe.FullName }; Write-Host ('Carpeta lista en: ' + $dir) -ForegroundColor Yellow; Read-Host 'Descarga el Playbook .apbx y arrastralo a AME Wizard. Presiona Enter para cerrar'",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "revision_tool",
+      "Name": "Revision Tool (ReviOS)",
+      "Category": "Optimizacion",
+      "Description": "Panel oficial de configuracion y ajustes de ReviOS (ultima version)",
+      "Source": "url",
+      "Target": "https://github.com/meetrevision/revision-tool/releases/latest/download/RevisionTool-Setup.exe",
+      "SilentArgs": "/VERYSILENT /NORESTART",
+      "Essential": false
+    },
+    {
       "Id": "shutup10",
       "Name": "O&O ShutUp10++",
       "Category": "Optimizacion",
