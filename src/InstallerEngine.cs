@@ -166,12 +166,16 @@ namespace Qinstall
             HashSet<string> installedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (apps == null || apps.Count == 0) return installedKeys;
 
-            // 1. Obtener IDs instalados actualmente desde Winget (estado real del sistema, sin archivos de log)
-            HashSet<string> wingetIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // 1. Recolectar nombres e IDs desde el Registro de Windows (HKLM 64/32 y HKCU)
+            HashSet<string> installedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> installedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectRegistryDisplayNames(installedNames);
+
+            // 2. Recolectar TODOS los paquetes instalados desde Winget (incluye Winget, ARP y Microsoft Store/MSIX)
             try
             {
                 StringBuilder output = new StringBuilder();
-                int code = await RunProcessAsync("winget", "list --source winget --accept-source-agreements --disable-interactivity", output, false);
+                int code = await RunProcessAsync("winget", "list --accept-source-agreements --disable-interactivity", output, false);
                 if (code == 0 || output.Length > 0)
                 {
                     string[] lines = output.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -195,11 +199,18 @@ namespace Qinstall
                         {
                             string line = lines[i];
                             if (line.Length <= idCol || line.StartsWith("---")) continue;
+
+                            string namePart = line.Substring(0, Math.Min(idCol, line.Length)).Trim();
+                            if (!string.IsNullOrWhiteSpace(namePart))
+                            {
+                                installedNames.Add(namePart);
+                            }
+
                             string rest = line.Substring(idCol).Trim();
                             string[] tokens = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                            if (tokens.Length > 0 && tokens[0].IndexOf('.') > 0)
+                            if (tokens.Length > 0)
                             {
-                                wingetIds.Add(tokens[0].Trim());
+                                installedIds.Add(tokens[0].Trim());
                             }
                         }
                     }
@@ -209,48 +220,225 @@ namespace Qinstall
             {
             }
 
-            // 2. Detectar ediciones de Microsoft Office Click-to-Run en el Registro de Windows
+            // 3. Detectar ediciones de Microsoft Office Click-to-Run en el Registro de Windows
             string officeReleaseIds = ReadOfficeReleaseIds();
+            bool hasDirectX9 = File.Exists(Path.Combine(Environment.SystemDirectory, "d3dx9_43.dll"));
 
-            // 3. Evaluar cada aplicacion del catalogo
+            // 4. Evaluar cada aplicacion del catalogo sin depender de archivos de logs
             for (int i = 0; i < apps.Count; i++)
             {
                 AppItem app = apps[i];
-                string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
-                bool isInstalled = false;
-
-                if (src == "winget" && !string.IsNullOrWhiteSpace(app.Target))
-                {
-                    isInstalled = wingetIds.Contains(app.Target.Trim());
-                }
-                else if (src == "local" && !string.IsNullOrEmpty(officeReleaseIds))
-                {
-                    string args = (app.SilentArgs ?? string.Empty).ToLowerInvariant();
-                    if (args.IndexOf("office2024", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        isInstalled = officeReleaseIds.IndexOf("2024", StringComparison.OrdinalIgnoreCase) >= 0;
-                    }
-                    else if (args.IndexOf("office2021", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        isInstalled = officeReleaseIds.IndexOf("2021", StringComparison.OrdinalIgnoreCase) >= 0;
-                    }
-                    else if (args.IndexOf("office2019", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        isInstalled = officeReleaseIds.IndexOf("2019", StringComparison.OrdinalIgnoreCase) >= 0;
-                    }
-                    else if (args.IndexOf("office2016", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        isInstalled = officeReleaseIds.IndexOf("ProPlusRetail", StringComparison.OrdinalIgnoreCase) >= 0;
-                    }
-                }
-
-                if (isInstalled)
+                if (IsAppDetectedAsInstalled(app, installedIds, installedNames, officeReleaseIds, hasDirectX9))
                 {
                     installedKeys.Add((app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty));
                 }
             }
 
             return installedKeys;
+        }
+
+        private static bool IsAppDetectedAsInstalled(
+            AppItem app,
+            HashSet<string> installedIds,
+            HashSet<string> installedNames,
+            string officeReleaseIds,
+            bool hasDirectX9)
+        {
+            string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            string target = (app.Target ?? string.Empty).Trim();
+            string id = (app.Id ?? string.Empty).Trim().ToLowerInvariant();
+            string name = (app.Name ?? string.Empty).Trim();
+
+            // Coincidencia exacta por ID de Winget
+            if (src == "winget" && !string.IsNullOrEmpty(target) && installedIds.Contains(target))
+            {
+                return true;
+            }
+
+            // Office local (Click-to-Run)
+            if (src == "local")
+            {
+                string args = (app.SilentArgs ?? string.Empty).ToLowerInvariant();
+                if (!string.IsNullOrEmpty(officeReleaseIds))
+                {
+                    if (args.IndexOf("office2024", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return officeReleaseIds.IndexOf("2024", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (args.IndexOf("office2021", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return officeReleaseIds.IndexOf("2021", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (args.IndexOf("office2019", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return officeReleaseIds.IndexOf("2019", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (args.IndexOf("office2016", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return officeReleaseIds.IndexOf("ProPlusRetail", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+                return false;
+            }
+
+            // Reglas especificas seguras para apps de Store / ARP / versiones
+            if (id == "directx") return hasDirectX9;
+            if (id == "chrome") return AnyNameStartsWith(installedNames, "Google Chrome");
+            if (id == "firefox") return AnyNameStartsWith(installedNames, "Mozilla Firefox");
+            if (id == "brave") return AnyNameStartsWith(installedNames, "Brave");
+            if (id == "operagx") return AnyNameStartsWith(installedNames, "Opera GX");
+            if (id == "7zip") return AnyNameStartsWith(installedNames, "7-Zip");
+            if (id == "winrar") return AnyNameStartsWith(installedNames, "WinRAR");
+            if (id == "everything") return AnyNameEqualsOrPrefix(installedNames, "Everything");
+            if (id == "powertoys") return AnyNameStartsWith(installedNames, "PowerToys") || AnyNameStartsWith(installedNames, "Microsoft PowerToys");
+            if (id == "rufus") return AnyNameEqualsOrPrefix(installedNames, "Rufus");
+            if (id == "crystaldisk") return AnyNameStartsWith(installedNames, "CrystalDiskInfo");
+            if (id == "cpuz") return AnyNameStartsWith(installedNames, "CPUID CPU-Z") || AnyNameEqualsOrPrefix(installedNames, "CPU-Z");
+            if (id == "treesize") return AnyNameStartsWith(installedNames, "TreeSize Free");
+            if (id == "vlc") return AnyNameStartsWith(installedNames, "VLC media player");
+            if (id == "spotify") return AnyNameEqualsOrPrefix(installedNames, "Spotify") || AnyIdContains(installedIds, "SpotifyAB.SpotifyMusic");
+            if (id == "obs") return AnyNameStartsWith(installedNames, "OBS Studio");
+            if (id == "sharex") return AnyNameEqualsOrPrefix(installedNames, "ShareX");
+            if (id == "gimp") return AnyNameEqualsOrPrefix(installedNames, "GIMP");
+            if (id == "paintnet") return AnyNameEqualsOrPrefix(installedNames, "paint.net");
+            if (id == "discord") return AnyNameEqualsOrPrefix(installedNames, "Discord") || AnyIdContains(installedIds, "XPDC2RH70K22MN");
+            if (id == "telegram") return AnyNameStartsWith(installedNames, "Telegram Desktop");
+            if (id == "zoom") return AnyNameEqualsOrPrefix(installedNames, "Zoom");
+            if (id == "libreoffice") return AnyNameStartsWith(installedNames, "LibreOffice");
+            if (id == "sumatrapdf") return AnyNameStartsWith(installedNames, "SumatraPDF");
+            if (id == "adobereader") return AnyNameStartsWith(installedNames, "Adobe Acrobat") || AnyNameStartsWith(installedNames, "Adobe Reader");
+            if (id == "obsidian") return AnyNameEqualsOrPrefix(installedNames, "Obsidian");
+            if (id == "gemini") return AnyNameEqualsOrPrefix(installedNames, "Google Gemini") || AnyNameEqualsOrPrefix(installedNames, "Gemini");
+            if (id == "antigravity") return AnyNameEqualsOrPrefix(installedNames, "Antigravity") && !AnyExactPrefixOnly(installedNames, "Antigravity IDE", "Antigravity CLI");
+            if (id == "antigravity_ide") return AnyNameStartsWith(installedNames, "Antigravity IDE");
+            if (id == "antigravity_cli") return AnyNameStartsWith(installedNames, "Antigravity CLI");
+            if (id == "opencode") return AnyNameEqualsOrPrefix(installedNames, "OpenCode") && !AnyExactPrefixOnly(installedNames, "OpenCode CLI", "OpenCode CLI");
+            if (id == "opencode_cli") return AnyNameStartsWith(installedNames, "OpenCode CLI");
+            if (id == "copilot_app") return AnyNameEqualsOrPrefix(installedNames, "GitHub Copilot") && !AnyExactPrefixOnly(installedNames, "GitHub Copilot CLI", "GitHub Copilot CLI");
+            if (id == "copilot_cli") return AnyNameStartsWith(installedNames, "GitHub Copilot CLI");
+            if (id == "vscode") return AnyNameStartsWith(installedNames, "Microsoft Visual Studio Code") || AnyNameStartsWith(installedNames, "Visual Studio Code");
+            if (id == "github_desktop") return AnyNameStartsWith(installedNames, "GitHub Desktop");
+            if (id == "git") return AnyNameEqualsOrPrefix(installedNames, "Git");
+            if (id == "notepadpp") return AnyNameStartsWith(installedNames, "Notepad++");
+            if (id == "python") return AnyNameStartsWith(installedNames, "Python 3.");
+            if (id == "nodejs") return AnyNameStartsWith(installedNames, "Node.js");
+            if (id == "steam") return installedNames.Contains("Steam");
+            if (id == "epic") return AnyNameStartsWith(installedNames, "Epic Games Launcher");
+            if (id == "vcredist") return AnyNameMatchesAll(installedNames, "Visual C++", "(x64)", "14.") || AnyNameMatchesAll(installedNames, "Visual C++", "2015-2022", "x64");
+            if (id == "dotnet8") return AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime - 8.") || AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime 8.");
+            if (id == "java8") return AnyNameStartsWith(installedNames, "Java 8");
+            if (id == "java17") return AnyNameMatchesAll(installedNames, "Temurin", "17", "JDK") || AnyNameStartsWith(installedNames, "Java(TM) SE Development Kit 17");
+            if (id == "java21") return AnyNameMatchesAll(installedNames, "Temurin", "21", "JDK") || AnyNameStartsWith(installedNames, "Java(TM) SE Development Kit 21");
+
+            // Para apps personalizadas agregadas por el usuario
+            if (!string.IsNullOrEmpty(name))
+            {
+                return AnyNameEqualsOrPrefix(installedNames, name);
+            }
+
+            return false;
+        }
+
+        private static void CollectRegistryDisplayNames(HashSet<string> targetSet)
+        {
+            RegistryKey[] roots = new[] { Registry.LocalMachine, Registry.CurrentUser };
+            string[] subPaths = new[]
+            {
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            };
+
+            for (int r = 0; r < roots.Length; r++)
+            {
+                for (int p = 0; p < subPaths.Length; p++)
+                {
+                    try
+                    {
+                        using (RegistryKey parent = roots[r].OpenSubKey(subPaths[p]))
+                        {
+                            if (parent == null) continue;
+                            string[] subKeys = parent.GetSubKeyNames();
+                            for (int i = 0; i < subKeys.Length; i++)
+                            {
+                                try
+                                {
+                                    using (RegistryKey sk = parent.OpenSubKey(subKeys[i]))
+                                    {
+                                        if (sk == null) continue;
+                                        object dn = sk.GetValue("DisplayName");
+                                        if (dn != null)
+                                        {
+                                            string s = dn.ToString().Trim();
+                                            if (!string.IsNullOrEmpty(s)) targetSet.Add(s);
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
+
+        private static bool AnyNameStartsWith(HashSet<string> names, string prefix)
+        {
+            foreach (string n in names)
+            {
+                if (n.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private static bool AnyNameEqualsOrPrefix(HashSet<string> names, string exactOrPrefix)
+        {
+            string withSpace = exactOrPrefix + " ";
+            string withDash = exactOrPrefix + "-";
+            foreach (string n in names)
+            {
+                if (n.Equals(exactOrPrefix, StringComparison.OrdinalIgnoreCase) ||
+                    n.StartsWith(withSpace, StringComparison.OrdinalIgnoreCase) ||
+                    n.StartsWith(withDash, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool AnyExactPrefixOnly(HashSet<string> names, string exclude1, string exclude2)
+        {
+            // Devuelve true solo si TODOS los nombres que empiezan por el prefijo pertenecen a los excluidos
+            bool anyMatch = false;
+            foreach (string n in names)
+            {
+                if (n.StartsWith(exclude1, StringComparison.OrdinalIgnoreCase) ||
+                    n.StartsWith(exclude2, StringComparison.OrdinalIgnoreCase))
+                {
+                    anyMatch = true;
+                }
+            }
+            return anyMatch && !names.Contains("Antigravity") && !names.Contains("OpenCode") && !names.Contains("GitHub Copilot");
+        }
+
+        private static bool AnyNameMatchesAll(HashSet<string> names, string part1, string part2, string part3)
+        {
+            foreach (string n in names)
+            {
+                if (n.IndexOf(part1, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    n.IndexOf(part2, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    n.IndexOf(part3, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool AnyIdContains(HashSet<string> ids, string fragment)
+        {
+            foreach (string id in ids)
+            {
+                if (id.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
         }
 
         private static string ReadOfficeReleaseIds()
