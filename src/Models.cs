@@ -214,6 +214,7 @@ namespace Qinstall
                 // Oficina y Documentos
                 Make("office2024", "Microsoft Office 2024", "Oficina", "Office 2024 ProPlus (64-bit ES) integrado en Qinstall", "local", "office\\setup.exe", false, "/configure office2024.xml"),
                 Make("office2021", "Microsoft Office 2021", "Oficina", "Office 2021 ProPlus (64-bit ES) integrado en Qinstall", "local", "office\\setup.exe", false, "/configure office2021.xml"),
+                Make("office2019", "Microsoft Office 2019", "Oficina", "Office 2019 ProPlus (64-bit ES) integrado en Qinstall", "local", "office\\setup.exe", false, "/configure office2019.xml"),
                 Make("office2016", "Microsoft Office 2016", "Oficina", "Office 2016 ProPlus (64-bit ES) integrado en Qinstall", "local", "office\\setup.exe", false, "/configure office2016.xml"),
                 Make("libreoffice", "LibreOffice", "Oficina", "Suite ofimatica gratuita completa", "winget", "TheDocumentFoundation.LibreOffice", false),
                 Make("sumatrapdf", "SumatraPDF", "Oficina", "Lector de PDF ultra rapido", "winget", "SumatraPDF.SumatraPDF", true),

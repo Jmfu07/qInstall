@@ -232,6 +232,16 @@
       "Essential": false
     },
     {
+      "Id": "office2019",
+      "Name": "Microsoft Office 2019",
+      "Category": "Oficina",
+      "Description": "Office 2019 ProPlus (64-bit ES) integrado en Qinstall",
+      "Source": "local",
+      "Target": "office\\setup.exe",
+      "SilentArgs": "/configure office2019.xml",
+      "Essential": false
+    },
+    {
       "Id": "office2016",
       "Name": "Microsoft Office 2016",
       "Category": "Oficina",
