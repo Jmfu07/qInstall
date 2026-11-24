@@ -8,6 +8,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace Qinstall
 {
@@ -158,6 +159,130 @@ namespace Qinstall
 
             EmitLog("[X] Error instalando Winget (codigo " + code + ").");
             return false;
+        }
+
+        public async Task<HashSet<string>> DetectInstalledAppKeysAsync(List<AppItem> apps)
+        {
+            HashSet<string> installedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (apps == null || apps.Count == 0) return installedKeys;
+
+            // 1. Obtener IDs instalados actualmente desde Winget (estado real del sistema, sin archivos de log)
+            HashSet<string> wingetIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                StringBuilder output = new StringBuilder();
+                int code = await RunProcessAsync("winget", "list --source winget --accept-source-agreements --disable-interactivity", output, false);
+                if (code == 0 || output.Length > 0)
+                {
+                    string[] lines = output.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    int headerIdx = -1;
+                    int idCol = -1;
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string line = lines[i];
+                        if (line.IndexOf("Id", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                            (line.IndexOf("Version", StringComparison.OrdinalIgnoreCase) >= 0 || line.IndexOf("Versi", StringComparison.OrdinalIgnoreCase) >= 0))
+                        {
+                            headerIdx = i;
+                            idCol = FindColumnStart(line, "Id");
+                            break;
+                        }
+                    }
+
+                    if (headerIdx >= 0 && idCol > 0)
+                    {
+                        for (int i = headerIdx + 2; i < lines.Length; i++)
+                        {
+                            string line = lines[i];
+                            if (line.Length <= idCol || line.StartsWith("---")) continue;
+                            string rest = line.Substring(idCol).Trim();
+                            string[] tokens = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            if (tokens.Length > 0 && tokens[0].IndexOf('.') > 0)
+                            {
+                                wingetIds.Add(tokens[0].Trim());
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            // 2. Detectar ediciones de Microsoft Office Click-to-Run en el Registro de Windows
+            string officeReleaseIds = ReadOfficeReleaseIds();
+
+            // 3. Evaluar cada aplicacion del catalogo
+            for (int i = 0; i < apps.Count; i++)
+            {
+                AppItem app = apps[i];
+                string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+                bool isInstalled = false;
+
+                if (src == "winget" && !string.IsNullOrWhiteSpace(app.Target))
+                {
+                    isInstalled = wingetIds.Contains(app.Target.Trim());
+                }
+                else if (src == "local" && !string.IsNullOrEmpty(officeReleaseIds))
+                {
+                    string args = (app.SilentArgs ?? string.Empty).ToLowerInvariant();
+                    if (args.IndexOf("office2024", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isInstalled = officeReleaseIds.IndexOf("2024", StringComparison.OrdinalIgnoreCase) >= 0;
+                    }
+                    else if (args.IndexOf("office2021", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isInstalled = officeReleaseIds.IndexOf("2021", StringComparison.OrdinalIgnoreCase) >= 0;
+                    }
+                    else if (args.IndexOf("office2019", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isInstalled = officeReleaseIds.IndexOf("2019", StringComparison.OrdinalIgnoreCase) >= 0;
+                    }
+                    else if (args.IndexOf("office2016", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        isInstalled = officeReleaseIds.IndexOf("ProPlusRetail", StringComparison.OrdinalIgnoreCase) >= 0;
+                    }
+                }
+
+                if (isInstalled)
+                {
+                    installedKeys.Add((app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty));
+                }
+            }
+
+            return installedKeys;
+        }
+
+        private static string ReadOfficeReleaseIds()
+        {
+            string[] paths = new[]
+            {
+                @"SOFTWARE\Microsoft\Office\ClickToRun\Configuration",
+                @"SOFTWARE\WOW6432Node\Microsoft\Office\ClickToRun\Configuration"
+            };
+
+            for (int i = 0; i < paths.Length; i++)
+            {
+                try
+                {
+                    using (RegistryKey key = Registry.LocalMachine.OpenSubKey(paths[i]))
+                    {
+                        if (key != null)
+                        {
+                            object val = key.GetValue("ProductReleaseIds");
+                            if (val != null)
+                            {
+                                string s = val.ToString();
+                                if (!string.IsNullOrWhiteSpace(s)) return s;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+            return string.Empty;
         }
 
         public async Task<List<WingetSearchEntry>> SearchWingetAsync(string query)

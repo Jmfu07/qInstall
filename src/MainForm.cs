@@ -25,11 +25,13 @@ namespace Qinstall
         private readonly InstallerEngine _engine;
         private AppCatalog _catalog;
         private readonly Dictionary<string, CheckBox> _appCheckboxes = new Dictionary<string, CheckBox>();
+        private readonly Dictionary<string, Label> _appTagLabels = new Dictionary<string, Label>();
         private readonly Dictionary<string, bool> _selectedState = new Dictionary<string, bool>();
+        private readonly HashSet<string> _installedApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool _isInstalling;
         private bool _cancelPending;
         private bool _wingetAvailable;
-        private bool _logVisible = true;
+        private bool _logVisible = false;
 
         // UI Controls
         private Label _lblWingetStatus;
@@ -187,7 +189,7 @@ namespace Qinstall
             pnlActions.Controls.Add(btnEditJson);
 
             Button btnReload = CreateFlatButton("Recargar", 80, 30, _bgControl);
-            btnReload.Click += delegate { LoadCatalogAndRender(); AppendLog("[*] Catalogo recargado desde apps.json."); };
+            btnReload.Click += delegate { LoadCatalogAndRender(); RefreshInstalledAppsAsync(); };
             pnlActions.Controls.Add(btnReload);
 
             // 3. FOOTER (barra de progreso + boton instalar)
@@ -222,7 +224,7 @@ namespace Qinstall
             _chkUpgrade.Location = new Point(490, 13);
             pnlFooter.Controls.Add(_chkUpgrade);
 
-            _btnToggleLog = CreateFlatButton("Ocultar consola", 118, 26, _bgControl);
+            _btnToggleLog = CreateFlatButton("Mostrar consola", 118, 26, _bgControl);
             _btnToggleLog.Font = new Font("Segoe UI", 8.5f);
             _btnToggleLog.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnToggleLog.Location = new Point(pnlFooter.Width - 360, 10);
@@ -252,10 +254,11 @@ namespace Qinstall
             _btnInstall.Click += BtnInstall_Click;
             pnlFooter.Controls.Add(_btnInstall);
 
-            // 4. LOG PANEL (encima del footer)
+            // 4. LOG PANEL (encima del footer, oculto por defecto para mantener la interfaz limpia)
             _pnlLogContainer = new Panel();
             _pnlLogContainer.Dock = DockStyle.Bottom;
             _pnlLogContainer.Height = 135;
+            _pnlLogContainer.Visible = _logVisible;
             _pnlLogContainer.BackColor = Color.FromArgb(14, 16, 22);
             _pnlLogContainer.Padding = new Padding(20, 6, 20, 6);
             this.Controls.Add(_pnlLogContainer);
@@ -315,6 +318,52 @@ namespace Qinstall
                 _btnInstallWinget.Visible = true;
                 AppendLog("[!] Winget no esta disponible en este equipo. Puedes instalarlo con el boton 'Instalar Winget' o usar apps por URL/Local.");
             }
+
+            RefreshInstalledAppsAsync();
+        }
+
+        private async void RefreshInstalledAppsAsync()
+        {
+            if (_catalog == null || _catalog.Apps == null) return;
+            if (!_isInstalling)
+            {
+                _lblStatus.Text = "Comprobando aplicaciones ya instaladas en este equipo...";
+            }
+
+            HashSet<string> detected = await _engine.DetectInstalledAppKeysAsync(_catalog.Apps);
+            if (this.IsDisposed) return;
+
+            _installedApps.Clear();
+            foreach (string key in detected)
+            {
+                _installedApps.Add(key);
+                // Desmarcar automaticamente si ya esta instalada
+                _selectedState[key] = false;
+            }
+
+            foreach (KeyValuePair<string, CheckBox> kv in _appCheckboxes)
+            {
+                AppItem item = kv.Value.Tag as AppItem;
+                if (item == null) continue;
+                bool isInst = _installedApps.Contains(kv.Key);
+                if (isInst && kv.Value.Checked)
+                {
+                    kv.Value.Checked = false;
+                }
+                Label tagLbl;
+                if (_appTagLabels.TryGetValue(kv.Key, out tagLbl))
+                {
+                    ApplyTagStyle(tagLbl, item, isInst);
+                }
+            }
+
+            UpdateSelectedCounter();
+            if (!_isInstalling)
+            {
+                _lblStatus.Text = string.Format(
+                    "Listo ({0} apps detectadas como instaladas en este equipo).",
+                    _installedApps.Count);
+            }
         }
 
         private void LoadCatalogAndRender()
@@ -328,6 +377,7 @@ namespace Qinstall
             _flowCategories.SuspendLayout();
             _flowCategories.Controls.Clear();
             _appCheckboxes.Clear();
+            _appTagLabels.Clear();
 
             string query = (filterText ?? string.Empty).Trim();
 
@@ -431,36 +481,50 @@ namespace Qinstall
                 card.Controls.Add(cb);
                 _appCheckboxes[key] = cb;
 
-                // Etiqueta de origen (WINGET / URL / LOCAL)
+                // Etiqueta de estado / origen (INSTALADO / ONLINE / URL / LOCAL)
                 Label lblTag = new Label();
-                string src = (app.Source ?? "winget").ToUpperInvariant();
-                lblTag.Text = src == "WINGET" ? "ONLINE" : src;
-                lblTag.Font = new Font("Segoe UI Semibold", 7.2f);
+                lblTag.Font = new Font("Segoe UI Semibold", 7.0f);
                 lblTag.TextAlign = ContentAlignment.MiddleCenter;
-                lblTag.Size = new Size(56, 18);
-                lblTag.Location = new Point(cardWidth - 68, y + 3);
-
-                if (src == "WINGET")
-                {
-                    lblTag.BackColor = Color.FromArgb(30, 56, 95);
-                    lblTag.ForeColor = Color.FromArgb(145, 195, 255);
-                }
-                else if (src == "URL")
-                {
-                    lblTag.BackColor = Color.FromArgb(75, 52, 95);
-                    lblTag.ForeColor = Color.FromArgb(215, 175, 255);
-                }
-                else
-                {
-                    lblTag.BackColor = Color.FromArgb(36, 80, 56);
-                    lblTag.ForeColor = Color.FromArgb(155, 235, 185);
-                }
+                lblTag.Size = new Size(64, 18);
+                lblTag.Location = new Point(cardWidth - 76, y + 3);
+                ApplyTagStyle(lblTag, app, _installedApps.Contains(key));
 
                 card.Controls.Add(lblTag);
+                _appTagLabels[key] = lblTag;
                 y += rowHeight;
             }
 
             return card;
+        }
+
+        private static void ApplyTagStyle(Label lblTag, AppItem app, bool installed)
+        {
+            if (installed)
+            {
+                lblTag.Text = "INSTALADO";
+                lblTag.BackColor = Color.FromArgb(26, 98, 60);
+                lblTag.ForeColor = Color.FromArgb(175, 250, 205);
+                return;
+            }
+
+            string src = (app.Source ?? "winget").ToUpperInvariant();
+            lblTag.Text = src == "WINGET" ? "ONLINE" : src;
+
+            if (src == "WINGET")
+            {
+                lblTag.BackColor = Color.FromArgb(30, 56, 95);
+                lblTag.ForeColor = Color.FromArgb(145, 195, 255);
+            }
+            else if (src == "URL")
+            {
+                lblTag.BackColor = Color.FromArgb(75, 52, 95);
+                lblTag.ForeColor = Color.FromArgb(215, 175, 255);
+            }
+            else
+            {
+                lblTag.BackColor = Color.FromArgb(36, 80, 56);
+                lblTag.ForeColor = Color.FromArgb(155, 235, 185);
+            }
         }
 
         private List<AppItem> GetSelectedApps()
@@ -493,7 +557,9 @@ namespace Qinstall
             for (int i = 0; i < _catalog.Apps.Count; i++)
             {
                 AppItem app = _catalog.Apps[i];
-                _selectedState[GetAppKey(app)] = app.Essential;
+                string key = GetAppKey(app);
+                // Seleccionar esenciales que aun no estan instaladas
+                _selectedState[key] = app.Essential && !_installedApps.Contains(key);
             }
             SyncCheckboxesFromState();
         }
@@ -688,6 +754,11 @@ namespace Qinstall
                 InstallResult res = await _engine.InstallAppAsync(app, silent, upgrade);
                 results.Add(res);
 
+                if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                {
+                    MarkAppInstalledAndUncheck(app);
+                }
+
                 if (res.Status == InstallStatus.Cancelled)
                 {
                     break;
@@ -701,6 +772,27 @@ namespace Qinstall
             SetUiBusyState(false);
 
             ShowSummary(results);
+        }
+
+        private void MarkAppInstalledAndUncheck(AppItem app)
+        {
+            string key = GetAppKey(app);
+            _installedApps.Add(key);
+            _selectedState[key] = false;
+
+            CheckBox cb;
+            if (_appCheckboxes.TryGetValue(key, out cb))
+            {
+                cb.Checked = false;
+            }
+
+            Label tagLbl;
+            if (_appTagLabels.TryGetValue(key, out tagLbl))
+            {
+                ApplyTagStyle(tagLbl, app, true);
+            }
+
+            UpdateSelectedCounter();
         }
 
         private void SetUiBusyState(bool busy)
