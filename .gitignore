@@ -1,4 +1,5 @@
 *.exe
+!office/setup.exe
 *.pdb
 *.bak
 *.log

@@ -212,8 +212,9 @@ namespace Qinstall
                 Make("zoom", "Zoom Workplace", "Comunicacion", "Videollamadas y reuniones online", "winget", "Zoom.Zoom", false),
 
                 // Oficina y Documentos
-                Make("office2024", "Microsoft Office 2024", "Oficina", "Instalador Office 2024 desde el pendrive", "local", "ACTIVADORES Y OFFICE 21 24\\OFFICE 2024\\setup.exe", false, "/configure configuration.xml"),
-                Make("office2021", "Microsoft Office 2021", "Oficina", "Instalador Office 2021 desde el pendrive", "local", "ACTIVADORES Y OFFICE 21 24\\OFFICE 2021\\setup.exe", false, "/configure configuration.xml"),
+                Make("office2024", "Microsoft Office 2024", "Oficina", "Office 2024 ProPlus (64-bit ES) integrado en Qinstall", "local", "office\\setup.exe", false, "/configure office2024.xml"),
+                Make("office2021", "Microsoft Office 2021", "Oficina", "Office 2021 ProPlus (64-bit ES) integrado en Qinstall", "local", "office\\setup.exe", false, "/configure office2021.xml"),
+                Make("office2016", "Microsoft Office 2016", "Oficina", "Office 2016 ProPlus (64-bit ES) integrado en Qinstall", "local", "office\\setup.exe", false, "/configure office2016.xml"),
                 Make("libreoffice", "LibreOffice", "Oficina", "Suite ofimatica gratuita completa", "winget", "TheDocumentFoundation.LibreOffice", false),
                 Make("sumatrapdf", "SumatraPDF", "Oficina", "Lector de PDF ultra rapido", "winget", "SumatraPDF.SumatraPDF", true),
                 Make("adobereader", "Adobe Acrobat Reader", "Oficina", "Lector oficial de documentos PDF", "winget", "Adobe.Acrobat.Reader.64-bit", false),

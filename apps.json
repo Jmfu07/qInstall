@@ -215,20 +215,30 @@
       "Id": "office2024",
       "Name": "Microsoft Office 2024",
       "Category": "Oficina",
-      "Description": "Instalador Office 2024 desde el pendrive",
+      "Description": "Office 2024 ProPlus (64-bit ES) integrado en Qinstall",
       "Source": "local",
-      "Target": "ACTIVADORES Y OFFICE 21 24\\OFFICE 2024\\setup.exe",
-      "SilentArgs": "/configure configuration.xml",
+      "Target": "office\\setup.exe",
+      "SilentArgs": "/configure office2024.xml",
       "Essential": false
     },
     {
       "Id": "office2021",
       "Name": "Microsoft Office 2021",
       "Category": "Oficina",
-      "Description": "Instalador Office 2021 desde el pendrive",
+      "Description": "Office 2021 ProPlus (64-bit ES) integrado en Qinstall",
       "Source": "local",
-      "Target": "ACTIVADORES Y OFFICE 21 24\\OFFICE 2021\\setup.exe",
-      "SilentArgs": "/configure configuration.xml",
+      "Target": "office\\setup.exe",
+      "SilentArgs": "/configure office2021.xml",
+      "Essential": false
+    },
+    {
+      "Id": "office2016",
+      "Name": "Microsoft Office 2016",
+      "Category": "Oficina",
+      "Description": "Office 2016 ProPlus (64-bit ES) integrado en Qinstall",
+      "Source": "local",
+      "Target": "office\\setup.exe",
+      "SilentArgs": "/configure office2016.xml",
       "Essential": false
     },
     {
