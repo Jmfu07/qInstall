@@ -172,16 +172,6 @@
       "Essential": false
     },
     {
-      "Id": "revision_tool",
-      "Name": "Revision Tool (ReviOS)",
-      "Category": "Optimizacion",
-      "Description": "Panel oficial de configuracion y ajustes de ReviOS (ultima version)",
-      "Source": "url",
-      "Target": "https://github.com/meetrevision/revision-tool/releases/latest/download/RevisionTool-Setup.exe",
-      "SilentArgs": "/VERYSILENT /NORESTART",
-      "Essential": false
-    },
-    {
       "Id": "shutup10",
       "Name": "O&O ShutUp10++",
       "Category": "Optimizacion",

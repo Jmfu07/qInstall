@@ -298,7 +298,6 @@ namespace Qinstall
             if (id == "autoruns") return AnyNameStartsWith(installedNames, "Autoruns");
             if (id == "processlasso") return AnyNameStartsWith(installedNames, "Process Lasso");
             if (id == "windhawk") return AnyNameEqualsOrPrefix(installedNames, "Windhawk");
-            if (id == "revision_tool") return AnyNameStartsWith(installedNames, "Revision Tool");
             if (id == "efibooteditor") return AnyNameStartsWith(installedNames, "EFI Boot Editor");
             if (id == "partboot") return AnyNameEqualsOrPrefix(installedNames, "PartBoot");
             if (id == "diskgenius") return AnyNameStartsWith(installedNames, "DiskGenius");
