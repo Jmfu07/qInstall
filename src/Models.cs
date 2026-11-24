@@ -212,28 +212,47 @@ namespace Qinstall
                 Make("zoom", "Zoom Workplace", "Comunicacion", "Videollamadas y reuniones online", "winget", "Zoom.Zoom", false),
 
                 // Oficina y Documentos
+                Make("office2024", "Microsoft Office 2024", "Oficina", "Instalador Office 2024 desde el pendrive", "local", "ACTIVADORES Y OFFICE 21 24\\OFFICE 2024\\setup.exe", false, "/configure configuration.xml"),
+                Make("office2021", "Microsoft Office 2021", "Oficina", "Instalador Office 2021 desde el pendrive", "local", "ACTIVADORES Y OFFICE 21 24\\OFFICE 2021\\setup.exe", false, "/configure configuration.xml"),
                 Make("libreoffice", "LibreOffice", "Oficina", "Suite ofimatica gratuita completa", "winget", "TheDocumentFoundation.LibreOffice", false),
                 Make("sumatrapdf", "SumatraPDF", "Oficina", "Lector de PDF ultra rapido", "winget", "SumatraPDF.SumatraPDF", true),
                 Make("adobereader", "Adobe Acrobat Reader", "Oficina", "Lector oficial de documentos PDF", "winget", "Adobe.Acrobat.Reader.64-bit", false),
                 Make("obsidian", "Obsidian", "Oficina", "Notas personales en Markdown", "winget", "Obsidian.Obsidian", false),
 
+                // IA y Agentes
+                Make("gemini", "Google Gemini", "IA y Agentes", "Aplicacion de escritorio de Google Gemini", "winget", "Google.GeminiDesktop", false),
+                Make("antigravity", "Google Antigravity", "IA y Agentes", "Plataforma y agente Google Antigravity", "winget", "Google.Antigravity", false),
+                Make("antigravity_ide", "Antigravity IDE", "IA y Agentes", "Entorno de desarrollo Antigravity IDE", "winget", "Google.AntigravityIDE", false),
+                Make("antigravity_cli", "Antigravity CLI", "IA y Agentes", "Interfaz de comandos de Antigravity", "winget", "Google.AntigravityCLI", false),
+                Make("opencode", "OpenCode Desktop", "IA y Agentes", "Aplicacion de escritorio OpenCode", "winget", "Anomaly.OpenCode.Desktop", false),
+                Make("opencode_cli", "OpenCode CLI", "IA y Agentes", "Agente de programacion OpenCode en terminal", "winget", "Anomaly.OpenCode", false),
+                Make("copilot_app", "GitHub Copilot", "IA y Agentes", "Aplicacion oficial de GitHub Copilot", "winget", "GitHub.CopilotApp", false),
+                Make("copilot_cli", "GitHub Copilot CLI", "IA y Agentes", "GitHub Copilot en linea de comandos", "winget", "GitHub.Copilot", false),
+
                 // Desarrollo
                 Make("vscode", "Visual Studio Code", "Desarrollo", "Editor de codigo moderno de Microsoft", "winget", "Microsoft.VisualStudioCode", true),
+                Make("github_desktop", "GitHub Desktop", "Desarrollo", "Cliente grafico oficial de GitHub", "winget", "GitHub.GitHubDesktop", true),
                 Make("git", "Git", "Desarrollo", "Control de versiones distribuido", "winget", "Git.Git", true),
                 Make("notepadpp", "Notepad++", "Desarrollo", "Editor de texto ligero y rapido", "winget", "Notepad++.Notepad++", true),
                 Make("python", "Python 3.12", "Desarrollo", "Lenguaje de programacion Python", "winget", "Python.Python.3.12", false),
                 Make("nodejs", "Node.js LTS", "Desarrollo", "Entorno de ejecucion JavaScript", "winget", "OpenJS.NodeJS.LTS", false),
 
-                // Juegos y Runtimes
+                // Juegos
                 Make("steam", "Steam", "Juegos", "Plataforma principal de videojuegos PC", "winget", "Valve.Steam", false),
                 Make("epic", "Epic Games Launcher", "Juegos", "Tienda y lanzador de Epic Games", "winget", "EpicGames.EpicGamesLauncher", false),
-                Make("vcredist", "Visual C++ 2015-2022 x64", "Runtimes", "Librerias esenciales para apps y juegos", "winget", "Microsoft.VCRedist.2015+.x64", true),
-                Make("dotnet8", ".NET Desktop Runtime 8", "Runtimes", "Runtime para aplicaciones modernas .NET", "winget", "Microsoft.DotNet.DesktopRuntime.8", false)
+
+                // Runtimes y Java
+                Make("directx", "DirectX Runtime", "Runtimes y Java", "Actualizador oficial DirectX End-User Runtime", "winget", "Microsoft.DirectX", true),
+                Make("vcredist", "Visual C++ 2015-2022 x64", "Runtimes y Java", "Librerias esenciales para apps y juegos", "winget", "Microsoft.VCRedist.2015+.x64", true),
+                Make("dotnet8", ".NET Desktop Runtime 8", "Runtimes y Java", "Runtime para aplicaciones modernas .NET", "winget", "Microsoft.DotNet.DesktopRuntime.8", false),
+                Make("java8", "Java 8 (Oracle JRE)", "Runtimes y Java", "Java Runtime Environment 8 oficial", "winget", "Oracle.JavaRuntimeEnvironment", false),
+                Make("java17", "Java 17 LTS (Temurin JDK)", "Runtimes y Java", "Eclipse Temurin JDK 17 LTS", "winget", "EclipseAdoptium.Temurin.17.JDK", false),
+                Make("java21", "Java 21 LTS (Temurin JDK)", "Runtimes y Java", "Eclipse Temurin JDK 21 LTS", "winget", "EclipseAdoptium.Temurin.21.JDK", false)
             };
             return cat;
         }
 
-        private static AppItem Make(string id, string name, string category, string desc, string source, string target, bool essential)
+        private static AppItem Make(string id, string name, string category, string desc, string source, string target, bool essential, string silentArgs = "")
         {
             AppItem item = new AppItem();
             item.Id = id;
@@ -242,7 +261,7 @@ namespace Qinstall
             item.Description = desc;
             item.Source = source;
             item.Target = target;
-            item.SilentArgs = string.Empty;
+            item.SilentArgs = silentArgs ?? string.Empty;
             item.Essential = essential;
             return item;
         }

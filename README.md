@@ -6,7 +6,7 @@ Instalador rápido, ligero y portable de aplicaciones para Windows (alternativa 
 
 - **100% Portable y sin dependencias**: Genera un único `Qinstall.exe` de menos de 100 KB que usa el `.NET Framework 4.8` incluido de fábrica en Windows 10 y 11.
 - **Modo Online con Winget**: Descarga e instala siempre la última versión oficial de cada programa de forma silenciosa y sin bloatware. Si el equipo no tiene Winget, ofrece instalarlo con un clic.
-- **Soporte Híbrido (URL directa y Pendrive Local)**: Además de Winget, puedes agregar instaladores desde cualquier URL directa (`.exe`/`.msi`) o archivos locales guardados en tu pendrive usando rutas relativas (por ejemplo `instaladores\mi_programa.exe`).
+- **Soporte Híbrido (URL directa y Pendrive Local)**: Además de Winget, puedes agregar instaladores desde cualquier URL directa (`.exe`/`.msi`) o archivos locales guardados en tu pendrive (incluyendo detección automática en unidades USB conectadas para instaladores como Microsoft Office 2021 y 2024).
 - **Catálogo editable sin recompilar (`apps.json`)**: Agrega o quita aplicaciones desde el botón **+ Agregar app** (incluye buscador integrado de Winget) o editando `apps.json`.
 - **Interfaz limpia tipo Ninite**: Agrupada por categorías, buscador instantáneo, selección rápida de esenciales, barra de progreso, registro en tiempo real y resumen final.
 

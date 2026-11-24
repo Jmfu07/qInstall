@@ -388,19 +388,74 @@ namespace Qinstall
                 return MakeResult(app, InstallStatus.Failed, "Ruta local vacia");
             }
 
-            string path = app.Target.Trim();
-            if (!Path.IsPathRooted(path))
+            string path = ResolveLocalPath(app.Target.Trim());
+            if (string.IsNullOrEmpty(path))
             {
-                path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, path);
+                EmitLog("[X] Archivo no encontrado en la carpeta local ni en unidades USB conectadas: " + app.Target);
+                return MakeResult(app, InstallStatus.Failed, "No se encontro en el pendrive: " + app.Target);
             }
 
-            if (!File.Exists(path))
-            {
-                EmitLog("[X] Archivo no encontrado en el pendrive: " + path);
-                return MakeResult(app, InstallStatus.Failed, "Archivo no encontrado: " + app.Target);
-            }
-
+            EmitLog("[*] Instalador local detectado: " + path);
             return await ExecuteInstallerFileAsync(app, path, silent);
+        }
+
+        private static string ResolveLocalPath(string target)
+        {
+            if (Path.IsPathRooted(target))
+            {
+                return File.Exists(target) ? target : null;
+            }
+
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            try
+            {
+                string loc = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (!string.IsNullOrEmpty(loc))
+                {
+                    baseDir = Path.GetDirectoryName(loc);
+                }
+            }
+            catch
+            {
+            }
+
+            // 1. Relativo a la carpeta donde esta Qinstall.exe
+            string candidate = Path.Combine(baseDir, target);
+            if (File.Exists(candidate)) return candidate;
+
+            // 2. Relativo a la raiz de la unidad donde esta Qinstall.exe (ej. E:\)
+            try
+            {
+                string root = Path.GetPathRoot(baseDir);
+                if (!string.IsNullOrEmpty(root))
+                {
+                    candidate = Path.Combine(root, target);
+                    if (File.Exists(candidate)) return candidate;
+                }
+            }
+            catch
+            {
+            }
+
+            // 3. Buscar automaticamente en cualquier pendrive USB conectado
+            try
+            {
+                DriveInfo[] drives = DriveInfo.GetDrives();
+                for (int i = 0; i < drives.Length; i++)
+                {
+                    DriveInfo d = drives[i];
+                    if (d.DriveType == DriveType.Removable && d.IsReady)
+                    {
+                        candidate = Path.Combine(d.RootDirectory.FullName, target);
+                        if (File.Exists(candidate)) return candidate;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
         }
 
         private async Task<InstallResult> ExecuteInstallerFileAsync(AppItem app, string filePath, bool silent)
@@ -420,7 +475,9 @@ namespace Qinstall
             else
             {
                 fileToRun = filePath;
-                args = silent ? (app.SilentArgs ?? string.Empty).Trim() : string.Empty;
+                string configuredArgs = (app.SilentArgs ?? string.Empty).Trim();
+                bool isRequiredConfigArg = configuredArgs.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0;
+                args = (silent || isRequiredConfigArg) ? configuredArgs : string.Empty;
             }
 
             EmitLog(string.Format("[*] Ejecutando: {0} {1}", Path.GetFileName(fileToRun), args));
@@ -515,6 +572,10 @@ namespace Qinstall
                     ProcessStartInfo psi = new ProcessStartInfo();
                     psi.FileName = fileName;
                     psi.Arguments = arguments;
+                    if (Path.IsPathRooted(fileName) && File.Exists(fileName))
+                    {
+                        psi.WorkingDirectory = Path.GetDirectoryName(fileName);
+                    }
                     psi.UseShellExecute = false;
                     psi.RedirectStandardOutput = true;
                     psi.RedirectStandardError = true;
@@ -595,6 +656,10 @@ namespace Qinstall
             ProcessStartInfo psi = new ProcessStartInfo();
             psi.FileName = fileName;
             psi.Arguments = arguments;
+            if (Path.IsPathRooted(fileName) && File.Exists(fileName))
+            {
+                psi.WorkingDirectory = Path.GetDirectoryName(fileName);
+            }
             psi.UseShellExecute = true;
             psi.Verb = "runas";
 

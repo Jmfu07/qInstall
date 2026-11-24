@@ -1,5 +1,5 @@
 {
-  "Version": "1.0",
+  "Version": "1.1",
   "Apps": [
     {
       "Id": "chrome",
@@ -212,6 +212,26 @@
       "Essential": false
     },
     {
+      "Id": "office2024",
+      "Name": "Microsoft Office 2024",
+      "Category": "Oficina",
+      "Description": "Instalador Office 2024 desde el pendrive",
+      "Source": "local",
+      "Target": "ACTIVADORES Y OFFICE 21 24\\OFFICE 2024\\setup.exe",
+      "SilentArgs": "/configure configuration.xml",
+      "Essential": false
+    },
+    {
+      "Id": "office2021",
+      "Name": "Microsoft Office 2021",
+      "Category": "Oficina",
+      "Description": "Instalador Office 2021 desde el pendrive",
+      "Source": "local",
+      "Target": "ACTIVADORES Y OFFICE 21 24\\OFFICE 2021\\setup.exe",
+      "SilentArgs": "/configure configuration.xml",
+      "Essential": false
+    },
+    {
       "Id": "libreoffice",
       "Name": "LibreOffice",
       "Category": "Oficina",
@@ -252,12 +272,102 @@
       "Essential": false
     },
     {
+      "Id": "gemini",
+      "Name": "Google Gemini",
+      "Category": "IA y Agentes",
+      "Description": "Aplicacion de escritorio de Google Gemini",
+      "Source": "winget",
+      "Target": "Google.GeminiDesktop",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "antigravity",
+      "Name": "Google Antigravity",
+      "Category": "IA y Agentes",
+      "Description": "Plataforma y agente Google Antigravity",
+      "Source": "winget",
+      "Target": "Google.Antigravity",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "antigravity_ide",
+      "Name": "Antigravity IDE",
+      "Category": "IA y Agentes",
+      "Description": "Entorno de desarrollo Antigravity IDE",
+      "Source": "winget",
+      "Target": "Google.AntigravityIDE",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "antigravity_cli",
+      "Name": "Antigravity CLI",
+      "Category": "IA y Agentes",
+      "Description": "Interfaz de comandos de Antigravity",
+      "Source": "winget",
+      "Target": "Google.AntigravityCLI",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "opencode",
+      "Name": "OpenCode Desktop",
+      "Category": "IA y Agentes",
+      "Description": "Aplicacion de escritorio OpenCode",
+      "Source": "winget",
+      "Target": "Anomaly.OpenCode.Desktop",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "opencode_cli",
+      "Name": "OpenCode CLI",
+      "Category": "IA y Agentes",
+      "Description": "Agente de programacion OpenCode en terminal",
+      "Source": "winget",
+      "Target": "Anomaly.OpenCode",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "copilot_app",
+      "Name": "GitHub Copilot",
+      "Category": "IA y Agentes",
+      "Description": "Aplicacion oficial de GitHub Copilot",
+      "Source": "winget",
+      "Target": "GitHub.CopilotApp",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "copilot_cli",
+      "Name": "GitHub Copilot CLI",
+      "Category": "IA y Agentes",
+      "Description": "GitHub Copilot en linea de comandos",
+      "Source": "winget",
+      "Target": "GitHub.Copilot",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "vscode",
       "Name": "Visual Studio Code",
       "Category": "Desarrollo",
       "Description": "Editor de codigo moderno de Microsoft",
       "Source": "winget",
       "Target": "Microsoft.VisualStudioCode",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "github_desktop",
+      "Name": "GitHub Desktop",
+      "Category": "Desarrollo",
+      "Description": "Cliente grafico oficial de GitHub",
+      "Source": "winget",
+      "Target": "GitHub.GitHubDesktop",
       "SilentArgs": "",
       "Essential": true
     },
@@ -322,9 +432,19 @@
       "Essential": false
     },
     {
+      "Id": "directx",
+      "Name": "DirectX Runtime",
+      "Category": "Runtimes y Java",
+      "Description": "Actualizador oficial DirectX End-User Runtime",
+      "Source": "winget",
+      "Target": "Microsoft.DirectX",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
       "Id": "vcredist",
       "Name": "Visual C++ 2015-2022 x64",
-      "Category": "Runtimes",
+      "Category": "Runtimes y Java",
       "Description": "Librerias esenciales para apps y juegos",
       "Source": "winget",
       "Target": "Microsoft.VCRedist.2015+.x64",
@@ -334,10 +454,40 @@
     {
       "Id": "dotnet8",
       "Name": ".NET Desktop Runtime 8",
-      "Category": "Runtimes",
+      "Category": "Runtimes y Java",
       "Description": "Runtime para aplicaciones modernas .NET",
       "Source": "winget",
       "Target": "Microsoft.DotNet.DesktopRuntime.8",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "java8",
+      "Name": "Java 8 (Oracle JRE)",
+      "Category": "Runtimes y Java",
+      "Description": "Java Runtime Environment 8 oficial",
+      "Source": "winget",
+      "Target": "Oracle.JavaRuntimeEnvironment",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "java17",
+      "Name": "Java 17 LTS (Temurin JDK)",
+      "Category": "Runtimes y Java",
+      "Description": "Eclipse Temurin JDK 17 LTS",
+      "Source": "winget",
+      "Target": "EclipseAdoptium.Temurin.17.JDK",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "java21",
+      "Name": "Java 21 LTS (Temurin JDK)",
+      "Category": "Runtimes y Java",
+      "Description": "Eclipse Temurin JDK 21 LTS",
+      "Source": "winget",
+      "Target": "EclipseAdoptium.Temurin.21.JDK",
       "SilentArgs": "",
       "Essential": false
     }
