@@ -493,21 +493,23 @@ namespace Qinstall
             return string.Empty;
         }
 
-        public async Task<List<WingetSearchEntry>> SearchWingetAsync(string query)
+        public async Task<List<WingetSearchEntry>> SearchWingetAsync(string query, int maxResults = 15)
         {
             List<WingetSearchEntry> results = new List<WingetSearchEntry>();
             if (string.IsNullOrWhiteSpace(query)) return results;
 
             string safeQuery = query.Replace("\"", string.Empty).Trim();
-            string args = "search \"" + safeQuery + "\" --source winget --accept-source-agreements";
+            string args = string.Format(
+                "search \"{0}\" --source winget -n {1} --accept-source-agreements --disable-interactivity",
+                safeQuery,
+                maxResults);
 
-            StringBuilder output = new StringBuilder();
-            await RunProcessAsync("winget", args, output, false);
+            string output = await RunQuickQueryAsync("winget", args, 8000);
+            if (string.IsNullOrEmpty(output)) return results;
 
-            string[] lines = output.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             int headerIdx = -1;
             int idCol = -1;
-            int verCol = -1;
 
             for (int i = 0; i < lines.Length; i++)
             {
@@ -517,8 +519,6 @@ namespace Qinstall
                 {
                     headerIdx = i;
                     idCol = FindColumnStart(line, "Id");
-                    verCol = FindColumnStart(line, "Version");
-                    if (verCol < 0) verCol = FindColumnStart(line, "Versi");
                     break;
                 }
             }
@@ -532,7 +532,7 @@ namespace Qinstall
             {
                 string line = lines[i];
                 if (line.Length <= idCol) continue;
-                if (line.StartsWith("---")) continue;
+                if (line.StartsWith("---") || line.StartsWith("<")) continue;
 
                 string namePart = line.Substring(0, Math.Min(idCol, line.Length)).Trim();
                 string rest = line.Substring(idCol).Trim();
@@ -550,10 +550,87 @@ namespace Qinstall
                 entry.Version = version;
                 results.Add(entry);
 
-                if (results.Count >= 30) break;
+                if (results.Count >= maxResults) break;
             }
 
             return results;
+        }
+
+        public async Task<string> GetWingetDescriptionAsync(string packageId)
+        {
+            if (string.IsNullOrWhiteSpace(packageId)) return string.Empty;
+            string safeId = packageId.Replace("\"", string.Empty).Trim();
+            string args = string.Format(
+                "show --id \"{0}\" --exact --source winget --accept-source-agreements --disable-interactivity",
+                safeId);
+
+            string output = await RunQuickQueryAsync("winget", args, 6000);
+            if (string.IsNullOrEmpty(output)) return string.Empty;
+
+            string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.StartsWith("Description:", StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("Descripci", StringComparison.OrdinalIgnoreCase))
+                {
+                    int colon = line.IndexOf(':');
+                    string sameLine = colon >= 0 ? line.Substring(colon + 1).Trim() : string.Empty;
+                    if (!string.IsNullOrEmpty(sameLine))
+                    {
+                        return TruncateText(sameLine, 120);
+                    }
+                    if (i + 1 < lines.Length)
+                    {
+                        string nextLine = lines[i + 1].Trim();
+                        if (!string.IsNullOrEmpty(nextLine) && !nextLine.EndsWith(":"))
+                        {
+                            return TruncateText(nextLine, 120);
+                        }
+                    }
+                }
+            }
+            return string.Empty;
+        }
+
+        private static string TruncateText(string text, int maxLen)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxLen) return text;
+            return text.Substring(0, maxLen - 3).TrimEnd() + "...";
+        }
+
+        private static Task<string> RunQuickQueryAsync(string fileName, string arguments, int timeoutMs)
+        {
+            return Task.Run(delegate
+            {
+                try
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    psi.FileName = fileName;
+                    psi.Arguments = arguments;
+                    psi.UseShellExecute = false;
+                    psi.RedirectStandardOutput = true;
+                    psi.RedirectStandardError = true;
+                    psi.CreateNoWindow = true;
+                    psi.StandardOutputEncoding = Encoding.UTF8;
+
+                    using (Process p = Process.Start(psi))
+                    {
+                        if (p == null) return string.Empty;
+                        Task<string> readTask = p.StandardOutput.ReadToEndAsync();
+                        if (!p.WaitForExit(timeoutMs))
+                        {
+                            try { p.Kill(); } catch { }
+                            return string.Empty;
+                        }
+                        return readTask.Wait(1000) ? readTask.Result : string.Empty;
+                    }
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            });
         }
 
         private static int FindColumnStart(string line, string headerWord)
