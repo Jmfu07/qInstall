@@ -281,12 +281,31 @@ namespace Qinstall
             if (id == "operagx") return AnyNameStartsWith(installedNames, "Opera GX");
             if (id == "7zip") return AnyNameStartsWith(installedNames, "7-Zip");
             if (id == "winrar") return AnyNameStartsWith(installedNames, "WinRAR");
+            if (id == "utorrent") return AnyNameStartsWith(installedNames, "uTorrent") || AnyNameStartsWith(installedNames, "\u00b5Torrent");
+            if (id == "qbittorrent") return AnyNameStartsWith(installedNames, "qBittorrent");
             if (id == "everything") return AnyNameEqualsOrPrefix(installedNames, "Everything");
             if (id == "powertoys") return AnyNameStartsWith(installedNames, "PowerToys") || AnyNameStartsWith(installedNames, "Microsoft PowerToys");
             if (id == "rufus") return AnyNameEqualsOrPrefix(installedNames, "Rufus");
             if (id == "crystaldisk") return AnyNameStartsWith(installedNames, "CrystalDiskInfo");
             if (id == "cpuz") return AnyNameStartsWith(installedNames, "CPUID CPU-Z") || AnyNameEqualsOrPrefix(installedNames, "CPU-Z");
             if (id == "treesize") return AnyNameStartsWith(installedNames, "TreeSize Free");
+            if (id == "wiztree") return AnyNameStartsWith(installedNames, "WizTree");
+            if (id == "shutup10") return AnyNameStartsWith(installedNames, "O&O ShutUp10");
+            if (id == "winaero") return AnyNameStartsWith(installedNames, "Winaero Tweaker");
+            if (id == "bleachbit") return AnyNameStartsWith(installedNames, "BleachBit");
+            if (id == "bcuninstaller") return AnyNameStartsWith(installedNames, "Bulk Crap Uninstaller") || AnyNameStartsWith(installedNames, "BCUninstaller");
+            if (id == "revo") return AnyNameStartsWith(installedNames, "Revo Uninstaller");
+            if (id == "autoruns") return AnyNameStartsWith(installedNames, "Autoruns");
+            if (id == "processlasso") return AnyNameStartsWith(installedNames, "Process Lasso");
+            if (id == "windhawk") return AnyNameEqualsOrPrefix(installedNames, "Windhawk");
+            if (id == "efibooteditor") return AnyNameStartsWith(installedNames, "EFI Boot Editor");
+            if (id == "partboot") return AnyNameEqualsOrPrefix(installedNames, "PartBoot");
+            if (id == "diskgenius") return AnyNameStartsWith(installedNames, "DiskGenius");
+            if (id == "testdisk") return AnyNameStartsWith(installedNames, "TestDisk");
+            if (id == "aomei_partition") return AnyNameStartsWith(installedNames, "AOMEI Partition Assistant");
+            if (id == "minitool_partition") return AnyNameStartsWith(installedNames, "MiniTool Partition Wizard");
+            if (id == "ventoy") return AnyNameEqualsOrPrefix(installedNames, "Ventoy");
+            if (src == "powershell") return false;
             if (id == "vlc") return AnyNameStartsWith(installedNames, "VLC media player");
             if (id == "spotify") return AnyNameEqualsOrPrefix(installedNames, "Spotify") || AnyIdContains(installedIds, "SpotifyAB.SpotifyMusic");
             if (id == "obs") return AnyNameStartsWith(installedNames, "OBS Studio");
@@ -571,6 +590,10 @@ namespace Qinstall
                 {
                     return await InstallViaLocalAsync(app, silent);
                 }
+                if (source == "powershell")
+                {
+                    return await RunPowerShellToolAsync(app);
+                }
 
                 return MakeResult(app, InstallStatus.Failed, "Origen desconocido: " + source);
             }
@@ -703,6 +726,44 @@ namespace Qinstall
             InstallResult res = await ExecuteInstallerFileAsync(app, localFile, silent);
             TryDeleteFile(localFile);
             return res;
+        }
+
+        private async Task<InstallResult> RunPowerShellToolAsync(AppItem app)
+        {
+            if (string.IsNullOrWhiteSpace(app.Target))
+            {
+                return MakeResult(app, InstallStatus.Failed, "Comando PowerShell vacio");
+            }
+
+            EmitLog("[*] Lanzando herramienta interactiva en PowerShell (Administrador): " + app.Name);
+            string encodedCmd = Convert.ToBase64String(Encoding.Unicode.GetBytes(app.Target.Trim()));
+            string psArgs = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encodedCmd;
+
+            int exitCode = await Task.Run(delegate
+            {
+                try
+                {
+                    return RunElevatedShell("powershell.exe", psArgs);
+                }
+                catch (Exception ex)
+                {
+                    EmitLog("[X] No se pudo iniciar PowerShell elevado: " + ex.Message);
+                    return -1;
+                }
+            });
+
+            if (_cancelRequested)
+            {
+                return MakeResult(app, InstallStatus.Cancelled, "Cancelado por el usuario");
+            }
+
+            if (exitCode == 0)
+            {
+                EmitLog("[OK] Herramienta finalizada: " + app.Name);
+                return MakeResult(app, InstallStatus.Success, "Ejecutada correctamente");
+            }
+
+            return MakeResult(app, InstallStatus.Failed, "Finalizo con codigo: " + exitCode);
         }
 
         private async Task<InstallResult> InstallViaLocalAsync(AppItem app, bool silent)

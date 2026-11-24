@@ -62,6 +62,26 @@
       "Essential": false
     },
     {
+      "Id": "utorrent",
+      "Name": "uTorrent Classic",
+      "Category": "Utilidades",
+      "Description": "Cliente BitTorrent clasico (descarga oficial)",
+      "Source": "url",
+      "Target": "https://download-new.utorrent.com/endpoint/utorrent/os/windows/track/stable/",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "qbittorrent",
+      "Name": "qBittorrent",
+      "Category": "Utilidades",
+      "Description": "Cliente BitTorrent libre y sin anuncios",
+      "Source": "winget",
+      "Target": "qBittorrent.qBittorrent",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "everything",
       "Name": "Everything",
       "Category": "Utilidades",
@@ -118,6 +138,196 @@
       "Description": "Analiza el espacio ocupado en disco",
       "Source": "winget",
       "Target": "JAMSoftware.TreeSize.Free",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "wiztree",
+      "Name": "WizTree",
+      "Category": "Utilidades",
+      "Description": "Analizador ultra rapido de espacio en disco",
+      "Source": "winget",
+      "Target": "AntibodySoftware.WizTree",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "winutil",
+      "Name": "Windows Utility (Chris Titus)",
+      "Category": "Optimizacion",
+      "Description": "Herramienta interactiva WinUtil para optimizar y limpiar Windows",
+      "Source": "powershell",
+      "Target": "irm 'https://christitus.com/win' | iex",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "shutup10",
+      "Name": "O&O ShutUp10++",
+      "Category": "Optimizacion",
+      "Description": "Desactiva telemetria y mejora privacidad en Windows",
+      "Source": "winget",
+      "Target": "OO-Software.ShutUp10",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "winaero",
+      "Name": "Winaero Tweaker",
+      "Category": "Optimizacion",
+      "Description": "Ajustes avanzados y optimizacion de Windows",
+      "Source": "winget",
+      "Target": "winaero.tweaker",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "bleachbit",
+      "Name": "BleachBit",
+      "Category": "Optimizacion",
+      "Description": "Limpiador ligero de archivos temporales y cache",
+      "Source": "winget",
+      "Target": "BleachBit.BleachBit",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "bcuninstaller",
+      "Name": "Bulk Crap Uninstaller",
+      "Category": "Optimizacion",
+      "Description": "Desinstalador masivo y limpieza profunda de restos",
+      "Source": "winget",
+      "Target": "Klocman.BulkCrapUninstaller",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "revo",
+      "Name": "Revo Uninstaller",
+      "Category": "Optimizacion",
+      "Description": "Desinstalador avanzado con limpieza de registro",
+      "Source": "winget",
+      "Target": "RevoUninstaller.RevoUninstaller",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "autoruns",
+      "Name": "Autoruns (Sysinternals)",
+      "Category": "Optimizacion",
+      "Description": "Control total de programas y servicios al arranque",
+      "Source": "winget",
+      "Target": "Microsoft.Sysinternals.Autoruns",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "processlasso",
+      "Name": "Process Lasso",
+      "Category": "Optimizacion",
+      "Description": "Optimizador de CPU y prioridades de procesos",
+      "Source": "winget",
+      "Target": "BitSum.ProcessLasso",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "windhawk",
+      "Name": "Windhawk",
+      "Category": "Optimizacion",
+      "Description": "Personalizacion y mejoras modulares para Windows",
+      "Source": "winget",
+      "Target": "RamenSoftware.Windhawk",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "efibooteditor",
+      "Name": "EFI Boot Editor",
+      "Category": "Arranque y Reparacion",
+      "Description": "Editor y reparador de entradas de arranque UEFI/EFI",
+      "Source": "winget",
+      "Target": "EFIBootEditor.EFIBootEditor",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "partboot",
+      "Name": "PartBoot",
+      "Category": "Arranque y Reparacion",
+      "Description": "Gestor y reparador de arranque UEFI y particiones",
+      "Source": "winget",
+      "Target": "Haxllo.PartBoot",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "diskgenius",
+      "Name": "DiskGenius",
+      "Category": "Arranque y Reparacion",
+      "Description": "Reparacion de MBR/GPT, particiones y recuperacion de datos",
+      "Source": "winget",
+      "Target": "Eassos.DiskGenius",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "testdisk",
+      "Name": "TestDisk",
+      "Category": "Arranque y Reparacion",
+      "Description": "Recuperacion de particiones perdidas y sector de arranque",
+      "Source": "winget",
+      "Target": "CGSecurity.TestDisk",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "aomei_partition",
+      "Name": "AOMEI Partition Assistant",
+      "Category": "Arranque y Reparacion",
+      "Description": "Gestion de discos, conversion MBR/GPT y reparacion",
+      "Source": "winget",
+      "Target": "AOMEI.PartitionAssistant",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "minitool_partition",
+      "Name": "MiniTool Partition Wizard",
+      "Category": "Arranque y Reparacion",
+      "Description": "Gestion y reparacion de particiones y discos",
+      "Source": "winget",
+      "Target": "MiniTool.PartitionWizard.Free",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "ventoy",
+      "Name": "Ventoy",
+      "Category": "Arranque y Reparacion",
+      "Description": "Crea USB multiboot con ISOs de rescate y Windows",
+      "Source": "winget",
+      "Target": "Ventoy.Ventoy",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "repair_dism_sfc",
+      "Name": "Reparar Windows (DISM + SFC)",
+      "Category": "Arranque y Reparacion",
+      "Description": "Repara archivos del sistema corruptos con DISM y SFC",
+      "Source": "powershell",
+      "Target": "Write-Host '=== Reparando imagen de Windows (DISM) ===' -ForegroundColor Cyan; DISM /Online /Cleanup-Image /RestoreHealth; Write-Host '=== Verificando archivos del sistema (SFC) ===' -ForegroundColor Cyan; sfc /scannow; Read-Host 'Presiona Enter para cerrar'",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "backup_bcd",
+      "Name": "Ver/Respaldar Arranque (BCD)",
+      "Category": "Arranque y Reparacion",
+      "Description": "Lista entradas BCD y guarda respaldo automatico en Escritorio",
+      "Source": "powershell",
+      "Target": "Write-Host '=== Entradas de arranque actuales (BCDEdit) ===' -ForegroundColor Cyan; bcdedit /enum all; $bak = Join-Path $env:USERPROFILE ('Desktop\\BCD_Backup_' + (Get-Date -Format 'yyyyMMdd_HHmmss')); bcdedit /export $bak; Write-Host ('Respaldo BCD guardado en: ' + $bak) -ForegroundColor Green; Read-Host 'Presiona Enter para cerrar'",
       "SilentArgs": "",
       "Essential": false
     },

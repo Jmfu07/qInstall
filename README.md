@@ -46,4 +46,5 @@ Esto utiliza el compilador `csc.exe` integrado en Windows para generar `Qinstall
 Los valores válidos para `Source` son:
 - `"winget"`: `Target` es el ID del paquete en Winget (ej. `Google.Chrome`).
 - `"url"`: `Target` es el enlace directo al `.exe` o `.msi` y `SilentArgs` los parámetros silenciosos (ej. `/S` o `/VERYSILENT`).
-- `"local"`: `Target` es la ruta relativa junto a `Qinstall.exe` (ej. `instaladores\app.exe`).
+- `"local"`: `Target` es la ruta relativa junto a `Qinstall.exe` (ej. `office\setup.exe`).
+- `"powershell"`: `Target` es un comando o script interactivo que se abre en PowerShell como Administrador (ej. `irm 'https://christitus.com/win' | iex` para Windows Utility).

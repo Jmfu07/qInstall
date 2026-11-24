@@ -508,20 +508,27 @@ namespace Qinstall
             }
 
             string src = (app.Source ?? "winget").ToUpperInvariant();
-            lblTag.Text = src == "WINGET" ? "ONLINE" : src;
-
             if (src == "WINGET")
             {
+                lblTag.Text = "ONLINE";
                 lblTag.BackColor = Color.FromArgb(30, 56, 95);
                 lblTag.ForeColor = Color.FromArgb(145, 195, 255);
             }
             else if (src == "URL")
             {
+                lblTag.Text = "URL";
                 lblTag.BackColor = Color.FromArgb(75, 52, 95);
                 lblTag.ForeColor = Color.FromArgb(215, 175, 255);
             }
+            else if (src == "POWERSHELL")
+            {
+                lblTag.Text = "TOOL";
+                lblTag.BackColor = Color.FromArgb(95, 68, 22);
+                lblTag.ForeColor = Color.FromArgb(255, 220, 140);
+            }
             else
             {
+                lblTag.Text = src;
                 lblTag.BackColor = Color.FromArgb(36, 80, 56);
                 lblTag.ForeColor = Color.FromArgb(155, 235, 185);
             }
@@ -777,7 +784,11 @@ namespace Qinstall
         private void MarkAppInstalledAndUncheck(AppItem app)
         {
             string key = GetAppKey(app);
-            _installedApps.Add(key);
+            bool isTool = string.Equals(app.Source, "powershell", StringComparison.OrdinalIgnoreCase);
+            if (!isTool)
+            {
+                _installedApps.Add(key);
+            }
             _selectedState[key] = false;
 
             CheckBox cb;
@@ -786,10 +797,13 @@ namespace Qinstall
                 cb.Checked = false;
             }
 
-            Label tagLbl;
-            if (_appTagLabels.TryGetValue(key, out tagLbl))
+            if (!isTool)
             {
-                ApplyTagStyle(tagLbl, app, true);
+                Label tagLbl;
+                if (_appTagLabels.TryGetValue(key, out tagLbl))
+                {
+                    ApplyTagStyle(tagLbl, app, true);
+                }
             }
 
             UpdateSelectedCounter();

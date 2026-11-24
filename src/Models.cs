@@ -191,12 +191,37 @@ namespace Qinstall
                 // Utilidades
                 Make("7zip", "7-Zip", "Utilidades", "Compresor de archivos ligero y libre", "winget", "7zip.7zip", true),
                 Make("winrar", "WinRAR", "Utilidades", "Compresor clasico RAR y ZIP", "winget", "RARLab.WinRAR", false),
+                Make("utorrent", "uTorrent Classic", "Utilidades", "Cliente BitTorrent clasico (descarga oficial)", "url", "https://download-new.utorrent.com/endpoint/utorrent/os/windows/track/stable/", false),
+                Make("qbittorrent", "qBittorrent", "Utilidades", "Cliente BitTorrent libre y sin anuncios", "winget", "qBittorrent.qBittorrent", false),
                 Make("everything", "Everything", "Utilidades", "Buscador instantaneo de archivos", "winget", "voidtools.Everything", true),
                 Make("powertoys", "Microsoft PowerToys", "Utilidades", "Suite oficial de utilidades para Windows", "winget", "Microsoft.PowerToys", false),
                 Make("rufus", "Rufus", "Utilidades", "Crea memorias USB booteables", "winget", "Rufus.Rufus", false),
                 Make("crystaldisk", "CrystalDiskInfo", "Utilidades", "Diagnostico de salud de discos SSD/HDD", "winget", "CrystalDewWorld.CrystalDiskInfo", false),
                 Make("cpuz", "CPU-Z", "Utilidades", "Informacion detallada del hardware", "winget", "CPUID.CPU-Z", false),
                 Make("treesize", "TreeSize Free", "Utilidades", "Analiza el espacio ocupado en disco", "winget", "JAMSoftware.TreeSize.Free", false),
+                Make("wiztree", "WizTree", "Utilidades", "Analizador ultra rapido de espacio en disco", "winget", "AntibodySoftware.WizTree", false),
+
+                // Optimizacion
+                Make("winutil", "Windows Utility (Chris Titus)", "Optimizacion", "Herramienta interactiva WinUtil para optimizar y limpiar Windows", "powershell", "irm 'https://christitus.com/win' | iex", false),
+                Make("shutup10", "O&O ShutUp10++", "Optimizacion", "Desactiva telemetria y mejora privacidad en Windows", "winget", "OO-Software.ShutUp10", false),
+                Make("winaero", "Winaero Tweaker", "Optimizacion", "Ajustes avanzados y optimizacion de Windows", "winget", "winaero.tweaker", false),
+                Make("bleachbit", "BleachBit", "Optimizacion", "Limpiador ligero de archivos temporales y cache", "winget", "BleachBit.BleachBit", false),
+                Make("bcuninstaller", "Bulk Crap Uninstaller", "Optimizacion", "Desinstalador masivo y limpieza profunda de restos", "winget", "Klocman.BulkCrapUninstaller", false),
+                Make("revo", "Revo Uninstaller", "Optimizacion", "Desinstalador avanzado con limpieza de registro", "winget", "RevoUninstaller.RevoUninstaller", false),
+                Make("autoruns", "Autoruns (Sysinternals)", "Optimizacion", "Control total de programas y servicios al arranque", "winget", "Microsoft.Sysinternals.Autoruns", false),
+                Make("processlasso", "Process Lasso", "Optimizacion", "Optimizador de CPU y prioridades de procesos", "winget", "BitSum.ProcessLasso", false),
+                Make("windhawk", "Windhawk", "Optimizacion", "Personalizacion y mejoras modulares para Windows", "winget", "RamenSoftware.Windhawk", false),
+
+                // Arranque y Reparacion
+                Make("efibooteditor", "EFI Boot Editor", "Arranque y Reparacion", "Editor y reparador de entradas de arranque UEFI/EFI", "winget", "EFIBootEditor.EFIBootEditor", false),
+                Make("partboot", "PartBoot", "Arranque y Reparacion", "Gestor y reparador de arranque UEFI y particiones", "winget", "Haxllo.PartBoot", false),
+                Make("diskgenius", "DiskGenius", "Arranque y Reparacion", "Reparacion de MBR/GPT, particiones y recuperacion de datos", "winget", "Eassos.DiskGenius", false),
+                Make("testdisk", "TestDisk", "Arranque y Reparacion", "Recuperacion de particiones perdidas y sector de arranque", "winget", "CGSecurity.TestDisk", false),
+                Make("aomei_partition", "AOMEI Partition Assistant", "Arranque y Reparacion", "Gestion de discos, conversion MBR/GPT y reparacion", "winget", "AOMEI.PartitionAssistant", false),
+                Make("minitool_partition", "MiniTool Partition Wizard", "Arranque y Reparacion", "Gestion y reparacion de particiones y discos", "winget", "MiniTool.PartitionWizard.Free", false),
+                Make("ventoy", "Ventoy", "Arranque y Reparacion", "Crea USB multiboot con ISOs de rescate y Windows", "winget", "Ventoy.Ventoy", false),
+                Make("repair_dism_sfc", "Reparar Windows (DISM + SFC)", "Arranque y Reparacion", "Repara archivos del sistema corruptos con DISM y SFC", "powershell", "Write-Host '=== Reparando imagen de Windows (DISM) ===' -ForegroundColor Cyan; DISM /Online /Cleanup-Image /RestoreHealth; Write-Host '=== Verificando archivos del sistema (SFC) ===' -ForegroundColor Cyan; sfc /scannow; Read-Host 'Presiona Enter para cerrar'", false),
+                Make("backup_bcd", "Ver/Respaldar Arranque (BCD)", "Arranque y Reparacion", "Lista entradas BCD y guarda respaldo automatico en Escritorio", "powershell", "Write-Host '=== Entradas de arranque actuales (BCDEdit) ===' -ForegroundColor Cyan; bcdedit /enum all; $bak = Join-Path $env:USERPROFILE ('Desktop\\BCD_Backup_' + (Get-Date -Format 'yyyyMMdd_HHmmss')); bcdedit /export $bak; Write-Host ('Respaldo BCD guardado en: ' + $bak) -ForegroundColor Green; Read-Host 'Presiona Enter para cerrar'", false),
 
                 // Multimedia
                 Make("vlc", "VLC Media Player", "Multimedia", "Reproductor universal de video y audio", "winget", "VideoLAN.VLC", true),

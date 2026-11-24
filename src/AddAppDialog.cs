@@ -147,6 +147,7 @@ namespace Qinstall
             _cmbSource.Items.Add("winget");
             _cmbSource.Items.Add("url");
             _cmbSource.Items.Add("local");
+            _cmbSource.Items.Add("powershell");
             _cmbSource.SelectedIndex = 0;
             _cmbSource.SelectedIndexChanged += CmbSource_SelectedIndexChanged;
             this.Controls.Add(_cmbSource);
@@ -240,6 +241,12 @@ namespace Qinstall
                 _lblTargetHint.Text = "URL directa del instalador (.exe o .msi):";
                 _btnBrowse.Enabled = false;
                 _txtArgs.Enabled = true;
+            }
+            else if (src == "powershell")
+            {
+                _lblTargetHint.Text = "Comando PowerShell (ej. irm 'https://christitus.com/win' | iex):";
+                _btnBrowse.Enabled = false;
+                _txtArgs.Enabled = false;
             }
             else
             {
