@@ -27,6 +27,7 @@ namespace Qinstall
         private readonly Dictionary<string, CheckBox> _appCheckboxes = new Dictionary<string, CheckBox>();
         private readonly Dictionary<string, bool> _selectedState = new Dictionary<string, bool>();
         private bool _isInstalling;
+        private bool _cancelPending;
         private bool _wingetAvailable;
         private bool _logVisible = true;
 
@@ -287,7 +288,9 @@ namespace Qinstall
             _flowCategories.Padding = new Padding(16, 12, 16, 12);
             this.Controls.Add(_flowCategories);
 
-            // Asegurar orden correcto de Docking (Fill al frente)
+            // Orden de acoplamiento: Header arriba del todo, Toolbar debajo, Footer abajo del todo, Log encima del Footer, Categorias en el centro
+            pnlHeader.SendToBack();
+            pnlFooter.SendToBack();
             _flowCategories.BringToFront();
         }
 
@@ -610,9 +613,12 @@ namespace Qinstall
         {
             if (_isInstalling)
             {
-                _engine.CancelCurrent();
-                _btnInstall.Enabled = false;
+                if (_cancelPending) return;
+                _cancelPending = true;
+                _btnInstall.Text = "Cancelando...";
+                _btnInstall.BackColor = Color.FromArgb(140, 55, 62);
                 _lblStatus.Text = "Cancelando instalacion...";
+                _engine.CancelCurrent();
                 return;
             }
 
@@ -661,6 +667,7 @@ namespace Qinstall
             }
 
             _isInstalling = true;
+            _cancelPending = false;
             _engine.ResetCancellation();
             SetUiBusyState(true);
 
@@ -690,6 +697,7 @@ namespace Qinstall
             }
 
             _isInstalling = false;
+            _cancelPending = false;
             SetUiBusyState(false);
 
             ShowSummary(results);
@@ -697,22 +705,30 @@ namespace Qinstall
 
         private void SetUiBusyState(bool busy)
         {
-            _flowCategories.Enabled = !busy;
-            _txtSearch.Enabled = !busy;
-            _chkSilent.Enabled = !busy;
-            _chkUpgrade.Enabled = !busy;
+            // Evitar Enabled=false en controles con tema oscuro (WinForms dibuja texto negro ilegible al deshabilitar)
+            foreach (KeyValuePair<string, CheckBox> kv in _appCheckboxes)
+            {
+                kv.Value.AutoCheck = !busy;
+                kv.Value.Cursor = busy ? Cursors.Default : Cursors.Hand;
+            }
+
+            _txtSearch.ReadOnly = busy;
+            _chkSilent.AutoCheck = !busy;
+            _chkUpgrade.AutoCheck = !busy;
+            _chkSilent.ForeColor = busy ? Color.FromArgb(105, 118, 140) : _textMuted;
+            _chkUpgrade.ForeColor = busy ? Color.FromArgb(105, 118, 140) : _textMuted;
 
             if (busy)
             {
                 _btnInstall.Text = "Cancelar";
                 _btnInstall.BackColor = _accentRed;
-                _btnInstall.Enabled = true;
+                _btnInstall.ForeColor = Color.White;
             }
             else
             {
                 _btnInstall.Text = "Instalar seleccionadas";
                 _btnInstall.BackColor = _accentGreen;
-                _btnInstall.Enabled = true;
+                _btnInstall.ForeColor = Color.White;
             }
         }
 

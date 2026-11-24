@@ -98,6 +98,7 @@ namespace Qinstall
         public void CancelCurrent()
         {
             _cancelRequested = true;
+            bool killDenied = false;
             lock (_lock)
             {
                 if (_currentWebClient != null)
@@ -113,10 +114,20 @@ namespace Qinstall
                             _currentProcess.Kill();
                         }
                     }
-                    catch { }
+                    catch (Win32Exception)
+                    {
+                        killDenied = true;
+                    }
+                    catch
+                    {
+                    }
                 }
             }
             EmitLog("[!] Cancelacion solicitada por el usuario.");
+            if (killDenied)
+            {
+                EmitLog("[!] El instalador se esta ejecutando con permisos de Administrador; si su ventana sigue abierta, cierrala manualmente (o ejecuta Qinstall como Admin).");
+            }
         }
 
         public async Task<bool> InstallWingetAsync()
@@ -633,13 +644,21 @@ namespace Qinstall
 
                         proc.BeginOutputReadLine();
                         proc.BeginErrorReadLine();
-                        proc.WaitForExit();
+                        while (!proc.WaitForExit(250))
+                        {
+                            if (_cancelRequested)
+                            {
+                                try { proc.Kill(); } catch { }
+                                break;
+                            }
+                        }
 
                         lock (_lock)
                         {
                             _currentProcess = null;
                         }
 
+                        if (_cancelRequested) return -1;
                         return proc.ExitCode;
                     }
                 }
@@ -670,11 +689,19 @@ namespace Qinstall
                 {
                     _currentProcess = proc;
                 }
-                proc.WaitForExit();
+                while (!proc.WaitForExit(250))
+                {
+                    if (_cancelRequested)
+                    {
+                        try { proc.Kill(); } catch { }
+                        break;
+                    }
+                }
                 lock (_lock)
                 {
                     _currentProcess = null;
                 }
+                if (_cancelRequested) return -1;
                 return proc.ExitCode;
             }
         }
