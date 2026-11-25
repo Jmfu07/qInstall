@@ -12,6 +12,7 @@ office/Office/
 *.log
 bin/
 obj/
+dist/
 .vs/
 
 profiles.json
