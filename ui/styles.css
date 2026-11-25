@@ -895,12 +895,32 @@ body {
   border-radius: var(--radius-sm); font-size: 11px; font-weight: 600;
   background: var(--bg-surface-2); color: var(--text-secondary); border: 1px solid var(--border-subtle);
 }
+.table-actions-wrap {
+  display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px;
+}
 .table-action-btn {
   padding: 4px 10px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 600;
   background: var(--bg-surface-2); color: var(--text-secondary);
   border: 1px solid var(--border-subtle); cursor: pointer; font-family: inherit;
+  transition: all var(--transition-fast);
 }
 .table-action-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.table-action-btn.action-install {
+  background: rgba(16, 185, 129, 0.14); color: var(--cta-green); border-color: rgba(16, 185, 129, 0.35);
+}
+.table-action-btn.action-install:hover { background: var(--cta-green); color: #fff; border-color: var(--cta-green); }
+.table-action-btn.action-update {
+  background: rgba(59, 130, 246, 0.14); color: #60a5fa; border-color: rgba(59, 130, 246, 0.35);
+}
+.table-action-btn.action-update:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
+.table-action-btn.action-warn {
+  background: rgba(245, 158, 11, 0.14); color: #fbbf24; border-color: rgba(245, 158, 11, 0.35);
+}
+.table-action-btn.action-warn:hover { background: #d97706; color: #fff; border-color: #d97706; }
+.table-action-btn.action-danger {
+  background: rgba(239, 68, 68, 0.12); color: #f87171; border-color: rgba(239, 68, 68, 0.32);
+}
+.table-action-btn.action-danger:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
 
 /* ==========================================================================
    FOOTER + NYAN CAT PROGRESS BAR

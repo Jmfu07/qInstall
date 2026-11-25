@@ -783,8 +783,26 @@ function renderTableView(items) {
       ? `v${escapeHtml(app.cachedVersion)} → v${escapeHtml(app.latestVersion)}`
       : (app.cachedVersion ? `v${escapeHtml(app.cachedVersion)}` : (app.hasOffline ? 'Local listo' : '—'));
     const sourceLabel = (app.source || 'winget').toUpperCase();
-    const actionLabel = app.outdated ? 'Reemplazar' : (app.installed ? 'Reinstalar' : (isSel ? 'Quitar' : 'Seleccionar'));
+    const canUninstall = !!app.installed && (app.source || 'winget') === 'winget';
     const ctxAttr = isOnline ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encodedKey}'))"`;
+
+    let actionButtons = '';
+    if (isOnline) {
+      actionButtons = `
+        <button class="table-action-btn" title="Guardar en tu catálogo" onclick="event.stopPropagation(); quickSaveOnline(decodeURIComponent('${encodedKey}'))">+ Guardar</button>
+        <button class="table-action-btn action-install" title="Instalar ahora" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encodedKey}'), 'install', true)">Instalar</button>`;
+    } else if (app.installed) {
+      const updBtn = `<button class="table-action-btn action-update" title="Actualizar o reinstalar esta aplicación" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encodedKey}'), 'update', false)">Actualizar</button>`;
+      const unBtn = canUninstall
+        ? `<button class="table-action-btn action-danger" title="Desinstalar esta aplicación del equipo" onclick="event.stopPropagation(); confirmUninstallApp(decodeURIComponent('${encodedKey}'))">Desinstalar</button>`
+        : '';
+      actionButtons = updBtn + unBtn;
+    } else if (app.outdated) {
+      actionButtons = `<button class="table-action-btn action-warn" title="Reemplazar instalador antiguo e instalar" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encodedKey}'), 'install', false)">Reemplazar</button>`;
+    } else {
+      const tipIns = (app.hasOffline && !app.requiresInternet) ? 'Instalar offline desde tu pendrive' : 'Instalar en esta PC';
+      actionButtons = `<button class="table-action-btn action-install" title="${tipIns}" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encodedKey}'), 'install', false)">Instalar</button>`;
+    }
 
     return `
       <tr class="table-row ${isSel ? 'selected' : ''}" data-key="${escapeHtml(app.key)}"
@@ -803,7 +821,7 @@ function renderTableView(items) {
         <td class="table-mono">${escapeHtml(sourceLabel)}</td>
         <td>${badgesHtml}</td>
         <td style="text-align:right;">
-          <button class="table-action-btn" onclick="event.stopPropagation(); toggleAppSelection(decodeURIComponent('${encodedKey}'), ${isOnline})">${actionLabel}</button>
+          <div class="table-actions-wrap">${actionButtons}</div>
         </td>
       </tr>`;
   }).join('');
@@ -852,12 +870,6 @@ function syncSelectionVisuals() {
     const k = el.getAttribute('data-key');
     const isSel = state.selectedKeys.has(k);
     el.classList.toggle('selected', isSel);
-    if (el.classList.contains('table-row')) {
-      const btn = el.querySelector('.table-action-btn');
-      if (btn && (btn.textContent === 'Seleccionar' || btn.textContent === 'Quitar')) {
-        btn.textContent = isSel ? 'Quitar' : 'Seleccionar';
-      }
-    }
   });
 }
 
@@ -1563,6 +1575,43 @@ function confirmCreateRestorePoint() {
     `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
      <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'createRestorePoint' })">Crear ahora</button>`
   );
+}
+
+function confirmSingleAppAction(key, mode, isOnlineSearch) {
+  if (state.isBusy) return;
+  const app = isOnlineSearch
+    ? state.onlineResults.find(a => a.key === key)
+    : state.apps.find(a => a.key === key);
+  if (!app) return;
+
+  const enc = encodeJsArg(key);
+  const isUpdate = mode === 'update';
+  const isOff = !isOnlineSearch && app.hasOffline && !app.requiresInternet;
+  const title = isUpdate ? 'Confirmar actualización' : 'Confirmar instalación';
+  const verb = isUpdate ? 'actualizar / reinstalar' : 'instalar';
+  const modeNote = isOff
+    ? '<span style="color:var(--cta-green); font-weight:600;">⚡ Se usará tu instalador offline guardado en el pendrive.</span>'
+    : '<span style="color:var(--text-muted);">Se descargará y ejecutará desde Internet.</span>';
+
+  openDialogModal(
+    title,
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Deseas <b>${verb} "${escapeHtml(app.name)}"</b> en este equipo?<br>${modeNote}</p>`,
+    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
+     <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeSingleAppAction(decodeURIComponent('${enc}'), '${isUpdate ? 'update' : 'install'}', ${!!isOnlineSearch})">${isUpdate ? 'Sí, actualizar' : 'Sí, instalar'}</button>`
+  );
+}
+
+function executeSingleAppAction(key, mode, isOnlineSearch) {
+  closeDialogModal();
+  const silent = document.getElementById('chkSilent').checked;
+  const upgrade = mode === 'update' ? true : document.getElementById('chkUpgrade').checked;
+  if (isOnlineSearch) {
+    const app = state.onlineResults.find(a => a.key === key);
+    if (!app) return;
+    postToHost({ action: 'installSelected', keys: [], onlineApps: [app], silent, upgrade });
+  } else {
+    postToHost({ action: 'installSelected', keys: [key], onlineApps: [], silent, upgrade });
+  }
 }
 
 function confirmUninstallApp(key) {
