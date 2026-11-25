@@ -878,12 +878,12 @@ namespace Qinstall
                 }
             }
 
-            object[] onlineRaw = msg.ContainsKey("onlineApps") ? msg["onlineApps"] as object[] : null;
-            if (onlineRaw != null)
+            System.Collections.IEnumerable onlineRaw = msg.ContainsKey("onlineApps") ? msg["onlineApps"] as System.Collections.IEnumerable : null;
+            if (onlineRaw != null && !(onlineRaw is string))
             {
-                for (int i = 0; i < onlineRaw.Length; i++)
+                foreach (object entry in onlineRaw)
                 {
-                    Dictionary<string, object> d = onlineRaw[i] as Dictionary<string, object>;
+                    Dictionary<string, object> d = entry as Dictionary<string, object>;
                     if (d == null) continue;
                     AppItem oa = new AppItem();
                     oa.Id = GetStr(d, "id");
@@ -1155,14 +1155,14 @@ namespace Qinstall
         {
             List<string> res = new List<string>();
             object v;
-            if (d != null && d.TryGetValue(key, out v))
+            if (d != null && d.TryGetValue(key, out v) && v != null && !(v is string))
             {
-                object[] arr = v as object[];
-                if (arr != null)
+                System.Collections.IEnumerable seq = v as System.Collections.IEnumerable;
+                if (seq != null)
                 {
-                    for (int i = 0; i < arr.Length; i++)
+                    foreach (object item in seq)
                     {
-                        if (arr[i] != null) res.Add(arr[i].ToString());
+                        if (item != null) res.Add(item.ToString());
                     }
                 }
             }

@@ -176,6 +176,10 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function encodeJsArg(str) {
+  return encodeURIComponent(String(str || '')).replace(/'/g, '%27');
+}
+
 /* ==========================================================================
    HOST MESSAGE HANDLER (C# -> JS)
    ========================================================================== */
@@ -504,7 +508,7 @@ function renderCategoryBar(filtered) {
   }
 
   catBar.innerHTML = cats.map(c => {
-    const enc = encodeURIComponent(c);
+    const enc = encodeJsArg(c);
     const active = state.galleryCategory === c ? 'active' : '';
     const iconName = CATEGORY_ICONS[c.toLowerCase()] || 'box';
     return `<button class="gallery-cat-pill ${active}" onclick="selectGalleryCategory(decodeURIComponent('${enc}'))"><i data-lucide="${iconName}" style="width:12px;height:12px;"></i><span>${escapeHtml(c)}</span></button>`;
@@ -561,7 +565,7 @@ function renderGalleryView(items) {
     const [c1, c2] = CATEGORY_GRADIENTS[catKey] || ['#4f46e5', '#8b5cf6'];
     const badgesHtml = getBadgesHtml(app);
     const tip = escapeHtml(getAppTooltip(app));
-    const encKey = encodeURIComponent(app.key);
+    const encKey = encodeJsArg(app.key);
     const ctxAttr = isOnline ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encKey}'))"`;
     const saveBtn = isOnline
       ? `<button class="btn-quick-save" title="Guardar en tu catálogo" onclick="event.stopPropagation(); quickSaveOnline(decodeURIComponent('${encKey}'))">+</button>`
@@ -673,7 +677,7 @@ function renderCardRow(app, isOnlineSearch) {
   const isSel = state.selectedKeys.has(app.key);
   const badgesHtml = getBadgesHtml(app);
   const tip = escapeHtml(getAppTooltip(app));
-  const encodedKey = encodeURIComponent(app.key);
+  const encodedKey = encodeJsArg(app.key);
   const ctxAttr = isOnlineSearch ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encodedKey}'))"`;
   const saveBtn = isOnlineSearch
     ? `<button class="btn-quick-save" title="Guardar en tu catálogo" onclick="event.stopPropagation(); quickSaveOnline(decodeURIComponent('${encodedKey}'))">+</button>`
@@ -705,7 +709,7 @@ function renderTableView(items) {
   tbody.innerHTML = items.map(app => {
     const isSel = state.selectedKeys.has(app.key);
     const badgesHtml = getBadgesHtml(app);
-    const encodedKey = encodeURIComponent(app.key);
+    const encodedKey = encodeJsArg(app.key);
     const isOnline = !!app.isOnlineSearch;
     const catIcon = CATEGORY_ICONS[(app.category || '').toLowerCase()] || 'box';
     const cacheCol = app.outdated
@@ -838,7 +842,7 @@ function renderEssentialsPicker() {
   const picker = document.getElementById('essentialsPicker');
   picker.innerHTML = state.apps.map(app => {
     const checked = currentEssentialApps.includes(app.name);
-    const enc = encodeURIComponent(app.name);
+    const enc = encodeJsArg(app.name);
     return `
       <label class="essentials-picker-item">
         <input type="checkbox" ${checked ? 'checked' : ''} onchange="togglePickerApp(decodeURIComponent('${enc}'), this.checked)">
