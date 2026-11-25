@@ -34,7 +34,7 @@ const state = {
   searchSeq: 0,
   searchTimer: null,
   viewMode: localStorage.getItem('qinstall_view') || 'cards',
-  galleryCategory: 'Todas',
+  galleryCategory: '',
   themeMode: localStorage.getItem('qinstall_theme') || 'dark',
   contextKey: null
 };
@@ -470,7 +470,7 @@ function getFilteredApps() {
 }
 
 function getCategoryFilteredApps(baseList) {
-  if (!state.galleryCategory || state.galleryCategory === 'Todas') return baseList;
+  if (!state.galleryCategory) return [];
   return baseList.filter(a => (a.category || 'Otros') === state.galleryCategory);
 }
 
@@ -487,19 +487,26 @@ function renderCategoryBar(filtered) {
     combined.push(...state.onlineResults);
   }
 
-  const cats = ['Todas'];
+  const cats = [];
   for (const app of combined) {
     const c = app.category || 'Otros';
     if (!cats.includes(c)) cats.push(c);
   }
+
+  if (cats.length === 0) {
+    state.galleryCategory = '';
+    catBar.innerHTML = '';
+    return;
+  }
+
   if (!cats.includes(state.galleryCategory)) {
-    state.galleryCategory = 'Todas';
+    state.galleryCategory = cats[0];
   }
 
   catBar.innerHTML = cats.map(c => {
     const enc = encodeURIComponent(c);
     const active = state.galleryCategory === c ? 'active' : '';
-    const iconName = c === 'Todas' ? 'layers' : (CATEGORY_ICONS[c.toLowerCase()] || 'box');
+    const iconName = CATEGORY_ICONS[c.toLowerCase()] || 'box';
     return `<button class="gallery-cat-pill ${active}" onclick="selectGalleryCategory(decodeURIComponent('${enc}'))"><i data-lucide="${iconName}" style="width:12px;height:12px;"></i><span>${escapeHtml(c)}</span></button>`;
   }).join('');
 }
@@ -507,14 +514,19 @@ function renderCategoryBar(filtered) {
 function renderActiveView() {
   const filtered = getFilteredApps();
   renderCategoryBar(filtered);
-  const visible = getCategoryFilteredApps(filtered);
+
+  const combined = [...filtered];
+  if (state.searchQuery.trim().length >= 2 && state.onlineResults.length > 0) {
+    combined.push(...state.onlineResults);
+  }
+  const visible = getCategoryFilteredApps(combined);
 
   if (state.viewMode === 'table') {
     renderTableView(visible);
   } else if (state.viewMode === 'gallery') {
-    renderGalleryView(filtered);
+    renderGalleryView(visible);
   } else {
-    renderCardsView(visible);
+    renderCardsView(getCategoryFilteredApps(filtered));
   }
   refreshIcons();
   updateCounter();
@@ -531,18 +543,9 @@ function selectGalleryCategory(cat) {
   if (scrollTarget) scrollTarget.scrollTop = 0;
 }
 
-function renderGalleryView(filtered) {
+function renderGalleryView(items) {
   const grid = document.getElementById('galleryGrid');
   if (!grid) return;
-
-  const combined = [...filtered];
-  if (state.searchQuery.trim().length >= 2 && state.onlineResults.length > 0) {
-    combined.push(...state.onlineResults);
-  }
-
-  const items = state.galleryCategory === 'Todas'
-    ? combined
-    : combined.filter(a => (a.category || 'Otros') === state.galleryCategory);
 
   if (items.length === 0) {
     grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:32px; color:var(--text-muted);">Sin aplicaciones para mostrar.</div>`;
@@ -691,14 +694,15 @@ function renderCardRow(app, isOnlineSearch) {
     </div>`;
 }
 
-function renderTableView(filtered) {
+function renderTableView(items) {
   const tbody = document.getElementById('denseTableBody');
-  const combined = [...filtered];
-  if (state.searchQuery.trim().length >= 2 && state.onlineResults.length > 0) {
-    combined.push(...state.onlineResults);
+  if (!tbody) return;
+  if (!items || items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted);">Sin aplicaciones para mostrar.</td></tr>`;
+    return;
   }
 
-  tbody.innerHTML = combined.map(app => {
+  tbody.innerHTML = items.map(app => {
     const isSel = state.selectedKeys.has(app.key);
     const badgesHtml = getBadgesHtml(app);
     const encodedKey = encodeURIComponent(app.key);
