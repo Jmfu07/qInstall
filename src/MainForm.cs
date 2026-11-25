@@ -199,11 +199,6 @@ namespace Qinstall
             btnEssentials.Click += BtnEssentials_Click;
             pnlActions.Controls.Add(btnEssentials);
 
-            Button btnSelectAll = CreateFlatButton("Todo", 66, 30, _bgControl);
-            btnSelectAll.Margin = new Padding(0, 0, 8, 0);
-            btnSelectAll.Click += BtnSelectAll_Click;
-            pnlActions.Controls.Add(btnSelectAll);
-
             Button btnClear = CreateFlatButton("Limpiar", 76, 30, _bgControl);
             btnClear.Margin = new Padding(0, 0, 8, 0);
             btnClear.Click += BtnClear_Click;
@@ -455,7 +450,7 @@ namespace Qinstall
                 _lblStatus.Text = "Comprobando aplicaciones ya instaladas en este equipo...";
             }
 
-            HashSet<string> detected = await _engine.DetectInstalledAppKeysAsync(_catalog.Apps);
+            HashSet<string> detected = await _engine.DetectInstalledAppKeysAsync(GetAllCatalogApps());
             if (this.IsDisposed) return;
 
             _installedApps.Clear();

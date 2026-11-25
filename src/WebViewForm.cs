@@ -59,6 +59,23 @@ namespace Qinstall
             this.FormClosing += WebViewForm_FormClosing;
         }
 
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_engine != null)
+                {
+                    _engine.LogMessage -= OnEngineLog;
+                    _engine.DownloadProgress -= OnDownloadProgress;
+                }
+                if (_webView != null && !_webView.IsDisposed)
+                {
+                    _webView.Dispose();
+                }
+            }
+            base.Dispose(disposing);
+        }
+
         private void ApplyNativeTitlebarTheme(bool dark)
         {
             try
@@ -445,6 +462,16 @@ namespace Qinstall
 
             if (string.IsNullOrWhiteSpace(item.Name) || string.IsNullOrWhiteSpace(item.Target)) return;
 
+            for (int i = 0; i < _catalog.Apps.Count; i++)
+            {
+                if (string.Equals(_catalog.Apps[i].Target, item.Target, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(_catalog.Apps[i].Id, item.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    PostToast("'" + item.Name + "' ya esta en tu catalogo.", "info");
+                    return;
+                }
+            }
+
             _catalog.Apps.Add(item);
             AppCatalog.Save(_catalog);
             ReloadCatalogInternal();
@@ -465,7 +492,18 @@ namespace Qinstall
                     break;
                 }
             }
-            if (target == null) return;
+            if (target == null)
+            {
+                for (int i = 0; i < _autoDiscoveredLocals.Count; i++)
+                {
+                    if (string.Equals(GetAppKey(_autoDiscoveredLocals[i]), key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        PostToast("Este archivo se detecta automaticamente en local\\. Abre Almacenamiento -> Abrir local\\ para borrarlo.", "info");
+                        return;
+                    }
+                }
+                return;
+            }
 
             _catalog.Apps.Remove(target);
             _outdatedCaches.Remove(key);
@@ -579,7 +617,15 @@ namespace Qinstall
                 }
 
                 AppItem item = new AppItem();
-                item.Id = "local_" + DateTime.Now.ToString("yyyyMMddHHmmss");
+                string baseId = "local_" + DateTime.Now.ToString("yyyyMMddHHmmss");
+                string uniqueId = baseId;
+                int suffix = 1;
+                while (HasCatalogId(uniqueId))
+                {
+                    suffix++;
+                    uniqueId = baseId + "_" + suffix;
+                }
+                item.Id = uniqueId;
                 item.Name = name;
                 item.Category = category;
                 item.Description = string.IsNullOrWhiteSpace(desc) ? ("Instalador local offline (" + srcFi.Name + ")") : desc;
@@ -1897,6 +1943,16 @@ namespace Qinstall
             catch
             {
             }
+        }
+
+        private bool HasCatalogId(string id)
+        {
+            if (_catalog == null || _catalog.Apps == null) return false;
+            for (int i = 0; i < _catalog.Apps.Count; i++)
+            {
+                if (string.Equals(_catalog.Apps[i].Id, id, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
         }
 
         private static string GetAppKey(AppItem app)

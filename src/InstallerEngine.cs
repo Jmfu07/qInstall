@@ -115,8 +115,8 @@ namespace Qinstall
                 {
                 }
 
-                string[] hosts = new[] { "www.msftconnecttest.com", "1.1.1.1" };
-                int[] ports = new[] { 80, 443 };
+                string[] hosts = new[] { "1.1.1.1", "8.8.8.8", "www.msftconnecttest.com" };
+                int[] ports = new[] { 443, 53, 80 };
 
                 for (int i = 0; i < hosts.Length; i++)
                 {
@@ -125,10 +125,17 @@ namespace Qinstall
                         using (TcpClient client = new TcpClient())
                         {
                             IAsyncResult ar = client.BeginConnect(hosts[i], ports[i], null, null);
-                            if (ar.AsyncWaitHandle.WaitOne(2000, false) && client.Connected)
+                            try
                             {
-                                client.EndConnect(ar);
-                                return true;
+                                if (ar.AsyncWaitHandle.WaitOne(1200, false) && client.Connected)
+                                {
+                                    client.EndConnect(ar);
+                                    return true;
+                                }
+                            }
+                            finally
+                            {
+                                try { ar.AsyncWaitHandle.Close(); } catch { }
                             }
                         }
                     }
@@ -351,9 +358,11 @@ namespace Qinstall
         {
             if (string.IsNullOrWhiteSpace(packageId)) return string.Empty;
             string safeId = packageId.Replace("\"", string.Empty).Trim();
+            string pkgSource = GetWingetSourceName(safeId);
             string args = string.Format(
-                "show --id \"{0}\" --exact --source winget --accept-source-agreements --disable-interactivity",
-                safeId);
+                "show --id \"{0}\" --exact --source {1} --accept-source-agreements --disable-interactivity",
+                safeId,
+                pkgSource);
 
             string output = await RunQuickQueryAsync("winget", args, 8000);
             if (string.IsNullOrEmpty(output)) return string.Empty;
@@ -1005,7 +1014,7 @@ namespace Qinstall
             if (id == "obsidian") return AnyNameEqualsOrPrefix(installedNames, "Obsidian");
             if (id == "google_drive") return AnyNameStartsWith(installedNames, "Google Drive");
             if (id == "chatgpt") return AnyNameEqualsOrPrefix(installedNames, "ChatGPT");
-            if (id == "claude") return AnyNameEqualsOrPrefix(installedNames, "Claude") && !AnyExactPrefixOnly(installedNames, "Claude Code", "Claude Science");
+            if (id == "claude") return HasBaseAppExcluding(installedNames, "Claude", "Claude Code", "Claude Science");
             if (id == "claude_code") return AnyNameStartsWith(installedNames, "Claude Code");
             if (id == "cursor") return AnyNameEqualsOrPrefix(installedNames, "Cursor");
             if (id == "windsurf") return AnyNameEqualsOrPrefix(installedNames, "Windsurf");
@@ -1016,13 +1025,13 @@ namespace Qinstall
             if (id == "jan_ai") return AnyNameEqualsOrPrefix(installedNames, "Jan");
             if (id == "cherry_studio") return AnyNameStartsWith(installedNames, "Cherry Studio");
             if (id == "comfyui") return AnyNameStartsWith(installedNames, "ComfyUI");
-            if (id == "gemini") return AnyNameEqualsOrPrefix(installedNames, "Google Gemini") || AnyNameEqualsOrPrefix(installedNames, "Gemini");
-            if (id == "antigravity") return AnyNameEqualsOrPrefix(installedNames, "Antigravity") && !AnyExactPrefixOnly(installedNames, "Antigravity IDE", "Antigravity CLI");
+            if (id == "gemini") return HasBaseAppExcluding(installedNames, "Google Gemini", "Google Gemini CLI", "Gemini CLI") || HasBaseAppExcluding(installedNames, "Gemini", "Gemini CLI", "Gemini API CLI");
+            if (id == "antigravity") return HasBaseAppExcluding(installedNames, "Antigravity", "Antigravity IDE", "Antigravity CLI") || HasBaseAppExcluding(installedNames, "Google Antigravity", "Antigravity IDE", "Antigravity CLI");
             if (id == "antigravity_ide") return AnyNameStartsWith(installedNames, "Antigravity IDE");
             if (id == "antigravity_cli") return AnyNameStartsWith(installedNames, "Antigravity CLI");
-            if (id == "opencode") return AnyNameEqualsOrPrefix(installedNames, "OpenCode") && !AnyExactPrefixOnly(installedNames, "OpenCode CLI", "OpenCode CLI");
+            if (id == "opencode") return HasBaseAppExcluding(installedNames, "OpenCode", "OpenCode CLI", "OpenCode CLI");
             if (id == "opencode_cli") return AnyNameStartsWith(installedNames, "OpenCode CLI");
-            if (id == "copilot_app") return AnyNameEqualsOrPrefix(installedNames, "GitHub Copilot") && !AnyExactPrefixOnly(installedNames, "GitHub Copilot CLI", "GitHub Copilot CLI");
+            if (id == "copilot_app") return HasBaseAppExcluding(installedNames, "GitHub Copilot", "GitHub Copilot CLI", "GitHub Copilot CLI");
             if (id == "copilot_cli") return AnyNameStartsWith(installedNames, "GitHub Copilot CLI");
             if (id == "jetbrains_toolbox") return AnyNameStartsWith(installedNames, "JetBrains Toolbox");
             if (id == "intellij") return AnyNameMatchesWithout(installedNames, "IntelliJ IDEA", "Community");
@@ -1173,19 +1182,22 @@ namespace Qinstall
             return false;
         }
 
-        private static bool AnyExactPrefixOnly(HashSet<string> names, string exclude1, string exclude2)
+        private static bool HasBaseAppExcluding(HashSet<string> names, string baseName, string exclude1, string exclude2)
         {
-            // Devuelve true solo si TODOS los nombres que empiezan por el prefijo pertenecen a los excluidos
-            bool anyMatch = false;
+            string withSpace = baseName + " ";
+            string withDash = baseName + "-";
             foreach (string n in names)
             {
-                if (n.StartsWith(exclude1, StringComparison.OrdinalIgnoreCase) ||
-                    n.StartsWith(exclude2, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(exclude1) && n.StartsWith(exclude1, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!string.IsNullOrEmpty(exclude2) && n.StartsWith(exclude2, StringComparison.OrdinalIgnoreCase)) continue;
+                if (n.Equals(baseName, StringComparison.OrdinalIgnoreCase) ||
+                    n.StartsWith(withSpace, StringComparison.OrdinalIgnoreCase) ||
+                    n.StartsWith(withDash, StringComparison.OrdinalIgnoreCase))
                 {
-                    anyMatch = true;
+                    return true;
                 }
             }
-            return anyMatch && !names.Contains("Antigravity") && !names.Contains("OpenCode") && !names.Contains("GitHub Copilot");
+            return false;
         }
 
         private static bool AnyNameMatchesAll(HashSet<string> names, string part1, string part2, string part3)

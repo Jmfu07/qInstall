@@ -1440,11 +1440,23 @@ document.getElementById('ctxDeleteCacheBtn').addEventListener('click', () => {
 document.getElementById('ctxRemoveBtn').addEventListener('click', () => {
   const k = state.contextKey;
   document.getElementById('appContextMenu').classList.remove('show');
-  if (k) {
-    state.selectedKeys.delete(k);
-    postToHost({ action: 'removeApp', key: k });
-  }
+  if (!k) return;
+  const app = state.apps.find(a => a.key === k);
+  const appName = app ? app.name : 'esta aplicación';
+  const enc = encodeJsArg(k);
+  openDialogModal(
+    'Quitar del catálogo',
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Seguro que deseas quitar <b>"${escapeHtml(appName)}"</b> de tu catálogo <b>apps.json</b>?</p>`,
+    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
+     <button class="btn-install cancel-mode" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeRemoveCatalogApp(decodeURIComponent('${enc}'))">Sí, quitar</button>`
+  );
 });
+
+function executeRemoveCatalogApp(key) {
+  closeDialogModal();
+  state.selectedKeys.delete(key);
+  postToHost({ action: 'removeApp', key });
+}
 
 function toggleSettingsModal() {
   const modal = document.getElementById('settingsBackdrop');
