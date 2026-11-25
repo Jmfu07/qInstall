@@ -370,20 +370,30 @@ namespace Qinstall
                 {
                     string[] files = Directory.GetFiles(dir);
                     string fallbackExe = null;
+                    string fallbackPkg = null;
+                    string fallbackZip = null;
                     for (int f = 0; f < files.Length; f++)
                     {
                         string ext = Path.GetExtension(files[f]).ToLowerInvariant();
-                        if (ext == ".msi" || ext == ".exe")
+                        bool isSupported = ext == ".msi" || ext == ".exe" ||
+                                           ext == ".msix" || ext == ".msixbundle" ||
+                                           ext == ".appx" || ext == ".appxbundle" ||
+                                           ext == ".zip";
+                        if (isSupported)
                         {
                             FileInfo fi = new FileInfo(files[f]);
                             if (fi.Length > 0)
                             {
                                 if (ext == ".msi") return files[f];
-                                fallbackExe = files[f];
+                                if (ext == ".exe") fallbackExe = files[f];
+                                else if (ext == ".zip") fallbackZip = files[f];
+                                else fallbackPkg = files[f];
                             }
                         }
                     }
                     if (!string.IsNullOrEmpty(fallbackExe)) return fallbackExe;
+                    if (!string.IsNullOrEmpty(fallbackPkg)) return fallbackPkg;
+                    if (!string.IsNullOrEmpty(fallbackZip)) return fallbackZip;
                 }
                 catch { }
             }
@@ -746,6 +756,7 @@ namespace Qinstall
                         if (_cancelRequested)
                         {
                             ClearDirectoryFiles(cacheDir);
+                            TryDeleteDirectoryIfNoInstaller(cacheDir);
                             return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
                         }
                         if (!string.IsNullOrEmpty(fastFile) && File.Exists(fastFile))
@@ -768,6 +779,7 @@ namespace Qinstall
                     int code = await RunProcessAsync("winget", args, output);
                     if (_cancelRequested)
                     {
+                        TryDeleteDirectoryIfNoInstaller(cacheDir);
                         return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
                     }
 
@@ -778,6 +790,7 @@ namespace Qinstall
                         return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(downloadedFile) + ")");
                     }
 
+                    TryDeleteDirectoryIfNoInstaller(cacheDir);
                     EmitLog("[X] No se pudo descargar instalador offline para " + app.Name + " (codigo " + code + ").");
                     return MakeResult(app, InstallStatus.Failed, "Winget no pudo descargar el instalador (codigo " + code + ")");
                 }
@@ -797,6 +810,7 @@ namespace Qinstall
                     }
                     catch
                     {
+                        TryDeleteDirectoryIfNoInstaller(cacheDir);
                         return MakeResult(app, InstallStatus.Failed, "URL invalida");
                     }
 
@@ -806,6 +820,7 @@ namespace Qinstall
                     if (_cancelRequested)
                     {
                         TryDeleteFile(destFile);
+                        TryDeleteDirectoryIfNoInstaller(cacheDir);
                         return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
                     }
                     if (ok && File.Exists(destFile))
@@ -813,6 +828,7 @@ namespace Qinstall
                         EmitLog("[OK] Guardado offline en: " + destFile);
                         return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(destFile) + ")");
                     }
+                    TryDeleteDirectoryIfNoInstaller(cacheDir);
                     return MakeResult(app, InstallStatus.Failed, "Fallo la descarga desde URL");
                 }
 
@@ -860,6 +876,35 @@ namespace Qinstall
                 {
                     try { File.Delete(files[i]); } catch { }
                 }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void TryDeleteDirectoryIfNoInstaller(string dir)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return;
+                string[] files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
+                for (int i = 0; i < files.Length; i++)
+                {
+                    string ext = Path.GetExtension(files[i]);
+                    bool isPkg =
+                        string.Equals(ext, ".msi", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ext, ".exe", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ext, ".msix", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ext, ".msixbundle", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ext, ".appx", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ext, ".appxbundle", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(ext, ".zip", StringComparison.OrdinalIgnoreCase);
+                    if (isPkg && new FileInfo(files[i]).Length > 0)
+                    {
+                        return;
+                    }
+                }
+                Directory.Delete(dir, true);
             }
             catch
             {
@@ -1848,6 +1893,25 @@ namespace Qinstall
                     : (silent ? "/qn /norestart" : "/qb /norestart");
                 args = string.Format("/i \"{0}\" {1}", filePath, extra);
             }
+            else if (ext == ".msix" || ext == ".msixbundle" || ext == ".appx" || ext == ".appxbundle")
+            {
+                fileToRun = "powershell.exe";
+                string ps = string.Format("Add-AppxPackage -Path '{0}'", filePath.Replace("'", "''"));
+                string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
+                args = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded;
+            }
+            else if (ext == ".zip")
+            {
+                string safeId = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id);
+                string installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Qinstall", "Tools", safeId);
+                fileToRun = "powershell.exe";
+                string ps = string.Format(
+                    "$dst = '{0}'; New-Item -ItemType Directory -Path $dst -Force | Out-Null; Expand-Archive -Path '{1}' -DestinationPath $dst -Force; $p = [Environment]::GetEnvironmentVariable('Path','User'); if ($p -notlike ('*' + $dst + '*')) {{ [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';') + ';' + $dst), 'User') }}",
+                    installDir.Replace("'", "''"),
+                    filePath.Replace("'", "''"));
+                string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
+                args = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded;
+            }
             else
             {
                 fileToRun = filePath;
@@ -1933,7 +1997,7 @@ namespace Qinstall
                     return null;
                 }
 
-                // Solo usar via directa para ejecutables .exe/.msi nativos (dejar .zip/.msix/store a winget download)
+                // Permitir via directa para .exe, .msi, .msix/.appx y .zip portables
                 string ext = string.Empty;
                 try
                 {
@@ -1942,10 +2006,19 @@ namespace Qinstall
                 }
                 catch { return null; }
 
-                if (ext != ".exe" && ext != ".msi")
+                bool allowedExt =
+                    ext == ".exe" || ext == ".msi" ||
+                    ext == ".msix" || ext == ".msixbundle" ||
+                    ext == ".appx" || ext == ".appxbundle" ||
+                    ext == ".zip";
+
+                if (!allowedExt)
                 {
                     if (installerType == "msi" || installerType == "wix") ext = ".msi";
                     else if (installerType == "exe" || installerType == "nullsoft" || installerType == "inno" || installerType == "burn") ext = ".exe";
+                    else if (installerType == "msix") ext = ".msix";
+                    else if (installerType == "appx") ext = ".appx";
+                    else if (installerType == "zip") ext = ".zip";
                     else return null;
                 }
 
