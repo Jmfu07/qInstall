@@ -19,6 +19,7 @@ if not exist "lib\webview2\Microsoft.Web.WebView2.WinForms.dll" (
 echo Compilando Qinstall.exe (WebView2 + respaldo WinForms)...
 "%CSC%" /nologo /target:winexe /optimize+ /platform:x64 ^
     /win32manifest:src\app.manifest ^
+    /win32icon:src\qinstall.ico ^
     /out:Qinstall.exe ^
     /r:System.dll ^
     /r:System.Core.dll ^

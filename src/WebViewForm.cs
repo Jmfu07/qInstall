@@ -47,6 +47,7 @@ namespace Qinstall
             this.MinimumSize = new Size(860, 580);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(9, 11, 16);
+            try { this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
             _webView = new WebView2();
             _webView.Dock = DockStyle.Fill;

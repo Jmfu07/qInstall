@@ -92,6 +92,7 @@ namespace Qinstall
             this.Size = new Size(1060, 740);
             this.MinimumSize = new Size(880, 600);
             this.StartPosition = FormStartPosition.CenterScreen;
+            try { this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             this.BackColor = _bgMain;
             this.ForeColor = _textPrimary;
             this.Font = new Font("Segoe UI", 9.5f);

@@ -207,27 +207,38 @@ body {
 .loader-glow-core {
   width: 56px;
   height: 56px;
-  background: linear-gradient(135deg, #5b21b6, #8b5cf6);
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #8b5cf6 100%);
   border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 28px rgba(139, 92, 246, 0.5);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 28px rgba(139, 92, 246, 0.52), inset 0 1px 1px rgba(255, 255, 255, 0.32);
   animation: pulseCore 2s ease-in-out infinite alternate;
   will-change: transform;
 }
+.loader-glow-core::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0px, rgba(0, 0, 0, 0.16) 1px, transparent 1px, transparent 3px);
+  pointer-events: none;
+}
 
 .loader-title {
-  font-size: 25px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 28px;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.03em;
   margin-bottom: 6px;
-  background: linear-gradient(120deg, #ffffff 35%, #a78bfa);
+  background: linear-gradient(120deg, #ffffff 30%, #93c5fd 90%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 [data-theme="light"] .loader-title {
-  background: linear-gradient(120deg, #0f172a 40%, #6d28d9);
+  background: linear-gradient(120deg, #0038b8 10%, #6d28d9 90%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -645,6 +656,8 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid transparent; flex-shrink: 0;
 }
+.badge-compact { min-width: auto; padding: 0 6px; font-size: 9px; }
+.badge-group { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .badge-installed { background: var(--status-installed-bg); color: var(--status-installed-text); border-color: var(--status-installed-border); }
 .badge-offline { background: var(--status-offline-bg); color: var(--status-offline-text); border-color: var(--status-offline-border); }
 .badge-online { background: var(--status-online-bg); color: var(--status-online-text); border-color: var(--status-online-border); }

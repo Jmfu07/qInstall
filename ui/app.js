@@ -340,16 +340,26 @@ function applyTheme(mode) {
 /* ==========================================================================
    RENDERING (GRID + DENSE TABLE + ONLINE WINGET SEARCH)
    ========================================================================== */
-function getBadgeInfo(app) {
-  if (app.installed) return { text: 'INSTALADO', cls: 'badge-installed' };
-  if (app.outdated) return { text: 'ACTUALIZAR', cls: 'badge-update' };
-  if (app.hasOffline && !app.requiresInternet) return { text: 'OFFLINE', cls: 'badge-offline' };
-  if (!state.env.hasInternet && app.requiresInternet) return { text: 'SIN RED', cls: 'badge-nonet' };
+function getBadgesHtml(app) {
   const src = (app.source || 'winget').toLowerCase();
-  if (src === 'winget') return { text: 'ONLINE', cls: 'badge-online' };
-  if (src === 'url') return { text: 'URL', cls: 'badge-url' };
-  if (src === 'powershell') return { text: 'TOOL', cls: 'badge-tool' };
-  return { text: app.requiresInternet ? 'ONLINE' : 'OFFLINE', cls: app.requiresInternet ? 'badge-online' : 'badge-offline' };
+  if (src === 'powershell') {
+    const netBadge = !state.env.hasInternet && app.requiresInternet
+      ? { text: 'SIN RED', cls: 'badge-nonet' }
+      : (app.requiresInternet
+        ? { text: 'ONLINE', cls: 'badge-online' }
+        : { text: 'OFFLINE', cls: 'badge-offline' });
+    return `<span class="badge-group"><span class="badge badge-tool badge-compact">TOOL</span><span class="badge ${netBadge.cls} badge-compact">${netBadge.text}</span></span>`;
+  }
+
+  if (app.installed) return '<span class="badge badge-installed">INSTALADO</span>';
+  if (app.outdated) return '<span class="badge badge-update">ACTUALIZAR</span>';
+  if (app.hasOffline && !app.requiresInternet) return '<span class="badge badge-offline">OFFLINE</span>';
+  if (!state.env.hasInternet && app.requiresInternet) return '<span class="badge badge-nonet">SIN RED</span>';
+  if (src === 'winget') return '<span class="badge badge-online">ONLINE</span>';
+  if (src === 'url') return '<span class="badge badge-url">URL</span>';
+  return app.requiresInternet
+    ? '<span class="badge badge-online">ONLINE</span>'
+    : '<span class="badge badge-offline">OFFLINE</span>';
 }
 
 function getAppTooltip(app) {
@@ -462,7 +472,7 @@ function renderCardsView(filtered) {
 
 function renderCardRow(app, isOnlineSearch) {
   const isSel = state.selectedKeys.has(app.key);
-  const badge = getBadgeInfo(app);
+  const badgesHtml = getBadgesHtml(app);
   const tip = escapeHtml(getAppTooltip(app));
   const encodedKey = encodeURIComponent(app.key);
   const ctxAttr = isOnlineSearch ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encodedKey}'))"`;
@@ -479,7 +489,7 @@ function renderCardRow(app, isOnlineSearch) {
       </div>
       <div class="app-right">
         ${saveBtn}
-        <span class="badge ${badge.cls}">${badge.text}</span>
+        ${badgesHtml}
       </div>
     </div>`;
 }
@@ -493,7 +503,7 @@ function renderTableView(filtered) {
 
   tbody.innerHTML = combined.map(app => {
     const isSel = state.selectedKeys.has(app.key);
-    const badge = getBadgeInfo(app);
+    const badgesHtml = getBadgesHtml(app);
     const encodedKey = encodeURIComponent(app.key);
     const isOnline = !!app.isOnlineSearch;
     const catIcon = CATEGORY_ICONS[(app.category || '').toLowerCase()] || 'box';
@@ -518,7 +528,7 @@ function renderTableView(filtered) {
         </td>
         <td class="table-mono">${cacheCol}</td>
         <td class="table-mono">${escapeHtml(sourceLabel)}</td>
-        <td><span class="badge ${badge.cls}">${badge.text}</span></td>
+        <td>${badgesHtml}</td>
         <td style="text-align:right;">
           <button class="table-action-btn" onclick="event.stopPropagation(); toggleAppSelection(decodeURIComponent('${encodedKey}'), ${isOnline})">${actionLabel}</button>
         </td>
