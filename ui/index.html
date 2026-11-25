@@ -243,17 +243,14 @@
       </div>
 
       <div class="view-switcher" title="Cambiar vista">
-        <button class="btn-view active" id="viewBtnCards" onclick="switchView('cards')">
-          <i data-lucide="layout-grid" style="width: 13px; height: 13px;"></i>
-          <span>Cuadrícula</span>
+        <button class="btn-view active" id="viewBtnCards" onclick="switchView('cards')" title="Galería" aria-label="Galería">
+          <i data-lucide="images" style="width: 18px; height: 18px;"></i>
         </button>
-        <button class="btn-view" id="viewBtnGallery" onclick="switchView('gallery')">
-          <i data-lucide="images" style="width: 13px; height: 13px;"></i>
-          <span>Galería</span>
+        <button class="btn-view" id="viewBtnGallery" onclick="switchView('gallery')" title="Cuadrícula" aria-label="Cuadrícula">
+          <i data-lucide="layout-grid" style="width: 18px; height: 18px;"></i>
         </button>
-        <button class="btn-view" id="viewBtnTable" onclick="switchView('table')">
-          <i data-lucide="table-2" style="width: 13px; height: 13px;"></i>
-          <span>Tabla Densa</span>
+        <button class="btn-view" id="viewBtnTable" onclick="switchView('table')" title="Tabla" aria-label="Tabla">
+          <i data-lucide="table-2" style="width: 18px; height: 18px;"></i>
         </button>
       </div>
 
