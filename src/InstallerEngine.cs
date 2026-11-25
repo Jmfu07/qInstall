@@ -275,6 +275,11 @@ namespace Qinstall
                 return string.Empty;
             }
 
+            if (src == "winget" && GetWingetSourceName(app.Target) == "msstore")
+            {
+                return "Solo instalación online: Microsoft Store bloquea descargas offline sin cuenta empresarial Entra ID (instálalo online con 'Instalar en esta PC')";
+            }
+
             if (id == "vs2022_community")
                 return "Solo instalación online: Visual Studio requiere varios GB de componentes";
             if (id == "android_studio")
@@ -1338,7 +1343,12 @@ namespace Qinstall
                     if (isNotFound404 && pkgSource == "winget" && !_cancelRequested)
                     {
                         EmitLog("[!] La ultima version de " + app.Name + " devolvio HTTP 404 en su servidor; probando version anterior estable en Winget...");
+                        await Task.Delay(500);
                         List<string> prevVersions = await GetWingetPreviousVersionsAsync(app.Target.Trim(), 2);
+                        if (prevVersions.Count == 0)
+                        {
+                            EmitLog("[!] No se pudieron listar versiones anteriores en Winget para " + app.Name + ".");
+                        }
                         for (int pv = 0; pv < prevVersions.Count && !_cancelRequested; pv++)
                         {
                             string fallbackVer = prevVersions[pv];
@@ -2520,11 +2530,13 @@ namespace Qinstall
             {
                 string safeId = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id);
                 string installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Qinstall", "Tools", safeId);
+                string msiFlags = silent ? "/qn /norestart" : "/qb /norestart";
                 fileToRun = "powershell.exe";
                 string ps = string.Format(
-                    "$dst = '{0}'; New-Item -ItemType Directory -Path $dst -Force | Out-Null; Expand-Archive -Path '{1}' -DestinationPath $dst -Force; $p = [Environment]::GetEnvironmentVariable('Path','User'); if ($p -notlike ('*' + $dst + '*')) {{ [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';') + ';' + $dst), 'User') }}",
+                    "$dst = '{0}'; New-Item -ItemType Directory -Path $dst -Force | Out-Null; Expand-Archive -Path '{1}' -DestinationPath $dst -Force; $msi = Get-ChildItem -Path $dst -Filter '*.msi' -File | Select-Object -First 1; if ($msi) {{ $p = Start-Process msiexec.exe -ArgumentList ('/i \"' + $msi.FullName + '\" {2}') -Wait -PassThru; exit $p.ExitCode }} else {{ $p = [Environment]::GetEnvironmentVariable('Path','User'); if ($p -notlike ('*' + $dst + '*')) {{ [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';') + ';' + $dst), 'User') }} }}",
                     installDir.Replace("'", "''"),
-                    filePath.Replace("'", "''"));
+                    filePath.Replace("'", "''"),
+                    msiFlags);
                 string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
                 args = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded;
             }
@@ -2568,30 +2580,35 @@ namespace Qinstall
                 string args = string.Format(
                     "show --id \"{0}\" --exact --source winget --versions --accept-source-agreements --disable-interactivity",
                     safeId);
-                string output = await RunQuickQueryAsync("winget", args, 8000);
-                if (string.IsNullOrWhiteSpace(output)) return result;
 
-                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                bool afterRule = false;
-                bool skippedLatest = false;
-                for (int i = 0; i < lines.Length; i++)
+                for (int attempt = 0; attempt < 2 && result.Count == 0; attempt++)
                 {
-                    string t = lines[i].Trim();
-                    if (!afterRule)
+                    if (attempt > 0) await Task.Delay(800);
+                    string output = await RunQuickQueryAsync("winget", args, 10000);
+                    if (string.IsNullOrWhiteSpace(output)) continue;
+
+                    string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    bool afterRule = false;
+                    bool skippedLatest = false;
+                    for (int i = 0; i < lines.Length; i++)
                     {
-                        if (t.StartsWith("---")) afterRule = true;
-                        continue;
+                        string t = CleanWingetLine(lines[i]).Trim();
+                        if (string.IsNullOrEmpty(t)) continue;
+                        if (!afterRule)
+                        {
+                            if (t.IndexOf("---", StringComparison.Ordinal) >= 0) afterRule = true;
+                            continue;
+                        }
+                        string verToken = t.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                        if (string.IsNullOrEmpty(verToken) || !char.IsDigit(verToken[0])) continue;
+                        if (!skippedLatest)
+                        {
+                            skippedLatest = true;
+                            continue;
+                        }
+                        result.Add(verToken);
+                        if (result.Count >= maxFallback) break;
                     }
-                    if (string.IsNullOrWhiteSpace(t)) continue;
-                    string verToken = t.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
-                    if (string.IsNullOrEmpty(verToken)) continue;
-                    if (!skippedLatest)
-                    {
-                        skippedLatest = true;
-                        continue;
-                    }
-                    result.Add(verToken);
-                    if (result.Count >= maxFallback) break;
                 }
             }
             catch { }
