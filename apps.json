@@ -752,6 +752,266 @@
       "Essential": false
     },
     {
+      "Id": "jetbrains_toolbox",
+      "Name": "JetBrains Toolbox",
+      "Category": "IDEs y JetBrains",
+      "Description": "Gestor oficial para instalar y actualizar todos los IDEs de JetBrains",
+      "Source": "winget",
+      "Target": "JetBrains.Toolbox",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "intellij",
+      "Name": "IntelliJ IDEA",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE insignia de JetBrains para Java, Kotlin y desarrollo empresarial",
+      "Source": "winget",
+      "Target": "JetBrains.IntelliJIDEA",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "intellij_community",
+      "Name": "IntelliJ IDEA Community",
+      "Category": "IDEs y JetBrains",
+      "Description": "Edicion gratuita y open-source de IntelliJ IDEA para Java y Kotlin",
+      "Source": "winget",
+      "Target": "JetBrains.IntelliJIDEA.Community",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "pycharm",
+      "Name": "PyCharm",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE profesional de JetBrains para Python, web y ciencia de datos",
+      "Source": "winget",
+      "Target": "JetBrains.PyCharm",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "pycharm_community",
+      "Name": "PyCharm Community",
+      "Category": "IDEs y JetBrains",
+      "Description": "Edicion gratuita de PyCharm para desarrollo en Python",
+      "Source": "winget",
+      "Target": "JetBrains.PyCharm.Community",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "webstorm",
+      "Name": "WebStorm",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE de JetBrains especializado en JavaScript, TypeScript y web",
+      "Source": "winget",
+      "Target": "JetBrains.WebStorm",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "clion",
+      "Name": "CLion",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE multiplataforma de JetBrains para C y C++",
+      "Source": "winget",
+      "Target": "JetBrains.CLion",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "rider",
+      "Name": "JetBrains Rider",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE rapido de JetBrains para .NET, C#, Unity y Unreal",
+      "Source": "winget",
+      "Target": "JetBrains.Rider",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "phpstorm",
+      "Name": "PhpStorm",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE de JetBrains para PHP, Laravel, Symfony y desarrollo web",
+      "Source": "winget",
+      "Target": "JetBrains.PhpStorm",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "datagrip",
+      "Name": "DataGrip",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE de JetBrains para bases de datos SQL (MySQL, PostgreSQL, SQL Server)",
+      "Source": "winget",
+      "Target": "JetBrains.DataGrip",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "goland",
+      "Name": "GoLand",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE de JetBrains dedicado al lenguaje Go",
+      "Source": "winget",
+      "Target": "JetBrains.GoLand",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "rustrover",
+      "Name": "RustRover",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE dedicado de JetBrains para programacion en Rust",
+      "Source": "winget",
+      "Target": "JetBrains.RustRover",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vs2022_community",
+      "Name": "Visual Studio 2022 Community",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE completo y gratuito de Microsoft para C#, C++, .NET y desktop",
+      "Source": "winget",
+      "Target": "Microsoft.VisualStudio.2022.Community",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "android_studio",
+      "Name": "Android Studio",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE oficial de Google para desarrollo de apps Android y Kotlin",
+      "Source": "winget",
+      "Target": "Google.AndroidStudio",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "eclipse_jee",
+      "Name": "Eclipse IDE (Java / Web)",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE clasico de Eclipse para Java empresarial y desarrollo web",
+      "Source": "winget",
+      "Target": "EclipseFoundation.Eclipse.JEE",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "eclipse_cpp",
+      "Name": "Eclipse IDE (C/C++)",
+      "Category": "IDEs y JetBrains",
+      "Description": "Edicion de Eclipse IDE especializada en C y C++",
+      "Source": "winget",
+      "Target": "EclipseFoundation.Eclipse.CPP",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "netbeans",
+      "Name": "Apache NetBeans",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE gratuito de Apache para Java, PHP, HTML5 y C/C++",
+      "Source": "winget",
+      "Target": "Apache.NetBeans",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vscodium",
+      "Name": "VSCodium",
+      "Category": "IDEs y JetBrains",
+      "Description": "Compilacion libre de Visual Studio Code sin telemetria",
+      "Source": "winget",
+      "Target": "VSCodium.VSCodium",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "sublime_text",
+      "Name": "Sublime Text 4",
+      "Category": "IDEs y JetBrains",
+      "Description": "Editor de codigo ultra rapido y ligero con multiples cursores",
+      "Source": "winget",
+      "Target": "SublimeHQ.SublimeText.4",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "zed",
+      "Name": "Zed",
+      "Category": "IDEs y JetBrains",
+      "Description": "Editor de codigo moderno de alto rendimiento escrito en Rust",
+      "Source": "winget",
+      "Target": "ZedIndustries.Zed",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "neovim",
+      "Name": "Neovim",
+      "Category": "IDEs y JetBrains",
+      "Description": "Editor extensible basado en Vim para terminal y flujo rapido",
+      "Source": "winget",
+      "Target": "Neovim.Neovim",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "devcpp",
+      "Name": "Embarcadero Dev-C++",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE clasico y ligero para programar en C y C++",
+      "Source": "winget",
+      "Target": "Embarcadero.Dev-C++",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "codeblocks",
+      "Name": "Code::Blocks (MinGW)",
+      "Category": "IDEs y JetBrains",
+      "Description": "IDE gratuito para C/C++ con compilador MinGW integrado",
+      "Source": "winget",
+      "Target": "CodeBlocks.CodeBlocks.MinGW",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "arduino_ide",
+      "Name": "Arduino IDE 2",
+      "Category": "IDEs y JetBrains",
+      "Description": "Entorno oficial para programar placas Arduino y microcontroladores",
+      "Source": "winget",
+      "Target": "ArduinoSA.IDE.stable",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "godot",
+      "Name": "Godot Engine",
+      "Category": "IDEs y JetBrains",
+      "Description": "Motor e IDE open-source para creacion de videojuegos 2D y 3D",
+      "Source": "winget",
+      "Target": "GodotEngine.GodotEngine",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "unity_hub",
+      "Name": "Unity Hub",
+      "Category": "IDEs y JetBrains",
+      "Description": "Gestor oficial de versiones y proyectos del motor Unity",
+      "Source": "winget",
+      "Target": "Unity.UnityHub",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "vscode",
       "Name": "Visual Studio Code",
       "Category": "Desarrollo",
@@ -792,6 +1052,16 @@
       "Essential": true
     },
     {
+      "Id": "windows_terminal",
+      "Name": "Windows Terminal",
+      "Category": "Desarrollo",
+      "Description": "Terminal moderna con pestanas para PowerShell, CMD y WSL",
+      "Source": "winget",
+      "Target": "Microsoft.WindowsTerminal",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "python",
       "Name": "Python 3.12",
       "Category": "Desarrollo",
@@ -808,6 +1078,36 @@
       "Description": "Entorno de ejecucion JavaScript",
       "Source": "winget",
       "Target": "OpenJS.NodeJS.LTS",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "postman",
+      "Name": "Postman",
+      "Category": "Desarrollo",
+      "Description": "Plataforma para disenar, probar y documentar APIs REST y GraphQL",
+      "Source": "winget",
+      "Target": "Postman.Postman",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "dbeaver",
+      "Name": "DBeaver Community",
+      "Category": "Desarrollo",
+      "Description": "Cliente SQL universal gratuito para MySQL, PostgreSQL, SQLite y mas",
+      "Source": "winget",
+      "Target": "DBeaver.DBeaver.Community",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "docker_desktop",
+      "Name": "Docker Desktop",
+      "Category": "Desarrollo",
+      "Description": "Contenedores Docker y entornos de desarrollo reproducibles en Windows",
+      "Source": "winget",
+      "Target": "Docker.DockerDesktop",
       "SilentArgs": "",
       "Essential": false
     },

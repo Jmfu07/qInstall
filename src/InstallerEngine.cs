@@ -817,12 +817,42 @@ namespace Qinstall
             if (id == "opencode_cli") return AnyNameStartsWith(installedNames, "OpenCode CLI");
             if (id == "copilot_app") return AnyNameEqualsOrPrefix(installedNames, "GitHub Copilot") && !AnyExactPrefixOnly(installedNames, "GitHub Copilot CLI", "GitHub Copilot CLI");
             if (id == "copilot_cli") return AnyNameStartsWith(installedNames, "GitHub Copilot CLI");
+            if (id == "jetbrains_toolbox") return AnyNameStartsWith(installedNames, "JetBrains Toolbox");
+            if (id == "intellij") return AnyNameMatchesWithout(installedNames, "IntelliJ IDEA", "Community");
+            if (id == "intellij_community") return AnyNameMatchesAll(installedNames, "IntelliJ IDEA", "Community", "");
+            if (id == "pycharm") return AnyNameMatchesWithout(installedNames, "PyCharm", "Community");
+            if (id == "pycharm_community") return AnyNameMatchesAll(installedNames, "PyCharm", "Community", "");
+            if (id == "webstorm") return AnyNameStartsWith(installedNames, "WebStorm");
+            if (id == "clion") return AnyNameStartsWith(installedNames, "CLion");
+            if (id == "rider") return AnyNameStartsWith(installedNames, "JetBrains Rider") || AnyNameEqualsOrPrefix(installedNames, "Rider");
+            if (id == "phpstorm") return AnyNameStartsWith(installedNames, "PhpStorm");
+            if (id == "datagrip") return AnyNameStartsWith(installedNames, "DataGrip");
+            if (id == "goland") return AnyNameStartsWith(installedNames, "GoLand");
+            if (id == "rustrover") return AnyNameStartsWith(installedNames, "RustRover");
+            if (id == "vs2022_community") return AnyNameStartsWith(installedNames, "Visual Studio Community 2022");
+            if (id == "android_studio") return AnyNameStartsWith(installedNames, "Android Studio");
+            if (id == "eclipse_jee") return AnyNameMatchesAll(installedNames, "Eclipse", "Enterprise", "Java") || AnyNameMatchesAll(installedNames, "Eclipse", "JEE", "");
+            if (id == "eclipse_cpp") return AnyNameMatchesAll(installedNames, "Eclipse", "C/C++", "");
+            if (id == "netbeans") return AnyNameStartsWith(installedNames, "Apache NetBeans");
+            if (id == "vscodium") return AnyNameEqualsOrPrefix(installedNames, "VSCodium");
+            if (id == "sublime_text") return AnyNameStartsWith(installedNames, "Sublime Text");
+            if (id == "zed") return AnyNameEqualsOrPrefix(installedNames, "Zed");
+            if (id == "neovim") return AnyNameEqualsOrPrefix(installedNames, "Neovim");
+            if (id == "devcpp") return AnyNameStartsWith(installedNames, "Embarcadero Dev-C++") || AnyNameStartsWith(installedNames, "Dev-C++");
+            if (id == "codeblocks") return AnyNameStartsWith(installedNames, "Code::Blocks") || AnyNameStartsWith(installedNames, "CodeBlocks");
+            if (id == "arduino_ide") return AnyNameStartsWith(installedNames, "Arduino IDE");
+            if (id == "godot") return AnyNameStartsWith(installedNames, "Godot Engine");
+            if (id == "unity_hub") return AnyNameStartsWith(installedNames, "Unity Hub");
             if (id == "vscode") return AnyNameStartsWith(installedNames, "Microsoft Visual Studio Code") || AnyNameStartsWith(installedNames, "Visual Studio Code");
             if (id == "github_desktop") return AnyNameStartsWith(installedNames, "GitHub Desktop");
             if (id == "git") return AnyNameEqualsOrPrefix(installedNames, "Git");
             if (id == "notepadpp") return AnyNameStartsWith(installedNames, "Notepad++");
+            if (id == "windows_terminal") return AnyNameStartsWith(installedNames, "Windows Terminal") || AnyIdContains(installedIds, "Microsoft.WindowsTerminal");
             if (id == "python") return AnyNameStartsWith(installedNames, "Python 3.");
             if (id == "nodejs") return AnyNameStartsWith(installedNames, "Node.js");
+            if (id == "postman") return AnyNameEqualsOrPrefix(installedNames, "Postman");
+            if (id == "dbeaver") return AnyNameStartsWith(installedNames, "DBeaver");
+            if (id == "docker_desktop") return AnyNameStartsWith(installedNames, "Docker Desktop");
             if (id == "steam") return installedNames.Contains("Steam");
             if (id == "epic") return AnyNameStartsWith(installedNames, "Epic Games Launcher");
             if (id == "vcredist") return AnyNameMatchesAll(installedNames, "Visual C++", "(x64)", "14.") || AnyNameMatchesAll(installedNames, "Visual C++", "2015-2022", "x64");
@@ -957,6 +987,19 @@ namespace Qinstall
                 if (n.IndexOf(part1, StringComparison.OrdinalIgnoreCase) >= 0 &&
                     n.IndexOf(part2, StringComparison.OrdinalIgnoreCase) >= 0 &&
                     n.IndexOf(part3, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool AnyNameMatchesWithout(HashSet<string> names, string requiredPrefix, string forbiddenSubstring)
+        {
+            foreach (string n in names)
+            {
+                if (n.StartsWith(requiredPrefix, StringComparison.OrdinalIgnoreCase) &&
+                    n.IndexOf(forbiddenSubstring, StringComparison.OrdinalIgnoreCase) < 0)
                 {
                     return true;
                 }
