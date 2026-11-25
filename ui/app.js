@@ -755,7 +755,7 @@ function renderTableView(items) {
       ? `v${escapeHtml(app.cachedVersion)} → v${escapeHtml(app.latestVersion)}`
       : (app.cachedVersion ? `v${escapeHtml(app.cachedVersion)}` : (app.hasOffline ? 'Local listo' : '—'));
     const sourceLabel = (app.source || 'winget').toUpperCase();
-    const canUninstall = !!app.installed && (app.source || 'winget') === 'winget';
+    const canUninstall = !!app.installed && (app.source || 'winget') !== 'powershell';
     const ctxAttr = isOnline ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encodedKey}'))"`;
 
     let actionButtons = '';
@@ -1610,7 +1610,7 @@ function confirmUninstallApp(key) {
   const enc = encodeJsArg(key);
   openDialogModal(
     'Confirmar desinstalación',
-    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>desinstalar "${escapeHtml(app.name)}"</b> de este equipo vía Winget?</p>`,
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>desinstalar "${escapeHtml(app.name)}"</b> de este equipo?</p>`,
     `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
      <button class="btn-install cancel-mode" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'uninstallApp', key: decodeURIComponent('${enc}'), silent: document.getElementById('chkSilent').checked })">Sí, desinstalar</button>`
   );
@@ -1623,7 +1623,7 @@ function openContextMenu(e, key) {
   if (!app) return;
   state.contextKey = key;
 
-  const canUninstall = !!app.installed && (app.source || 'winget') === 'winget';
+  const canUninstall = !!app.installed && (app.source || 'winget') !== 'powershell';
   const hasCache = !!app.hasOffline && Number(app.cachedSizeBytes || 0) > 0;
 
   const unBtn = document.getElementById('ctxUninstallBtn');

@@ -616,39 +616,449 @@ namespace Qinstall
 
         public async Task<InstallResult> UninstallAppAsync(AppItem app, bool silent)
         {
-            if (app == null || string.IsNullOrWhiteSpace(app.Target))
+            if (app == null || string.IsNullOrWhiteSpace(app.Name))
             {
                 return MakeResult(app, InstallStatus.Failed, "Aplicacion invalida para desinstalar");
             }
             string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
-            if (src != "winget")
+            if (src == "powershell")
             {
-                return MakeResult(app, InstallStatus.Failed, "La desinstalacion automatica solo aplica a apps Winget/Store");
+                return MakeResult(app, InstallStatus.Failed, "Las herramientas/enlaces PowerShell no se desinstalan");
             }
 
             EmitLog("--------------------------------------------------");
-            EmitLog("[*] Desinstalando: " + app.Name + " (" + app.Target + ")");
-            string pkgSource = GetWingetSourceName(app.Target);
+            EmitLog("[*] Desinstalando: " + app.Name + " (" + (app.Target ?? string.Empty) + ")");
+
+            // 1. Limpiar herramienta portable .zip instalada en %LOCALAPPDATA%\Qinstall\Tools\<id>
+            bool removedPortable = TryRemovePortableZipInstall(app);
+            if (removedPortable)
+            {
+                EmitLog("[OK] " + app.Name + " (herramienta portable) eliminada correctamente.");
+                return MakeResult(app, InstallStatus.Success, "Desinstalada correctamente (herramienta portable)");
+            }
+
+            // 2. Intentar desinstalacion directa por ID de Winget SIN forzar --source (funciona con winget, msstore y paquetes locales)
+            int lastCode = -1;
+            if (src == "winget" && !string.IsNullOrWhiteSpace(app.Target))
+            {
+                int wgCode = await TryWingetUninstallByIdAsync(app.Target.Trim(), silent, true);
+                if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Desinstalacion cancelada");
+                if (wgCode == 0)
+                {
+                    EmitLog("[OK] " + app.Name + " desinstalada correctamente.");
+                    return MakeResult(app, InstallStatus.Success, "Desinstalada correctamente");
+                }
+                lastCode = wgCode;
+            }
+
+            // 3. Buscar ID REAL instalado en `winget list` (cubre ARP\..., MSIX\..., Store IDs como Discord XPDC2RH70K22MN, Chrome ARP, Spotify MSIX, Dev-C++ URL, etc.)
+            string realInstalledId = await FindInstalledWingetIdAsync(app);
+            if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Desinstalacion cancelada");
+
+            if (!string.IsNullOrEmpty(realInstalledId))
+            {
+                if (!string.Equals(realInstalledId, (app.Target ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    EmitLog("[*] Paquete instalado real detectado: " + realInstalledId);
+                    int realCode = await TryWingetUninstallByIdAsync(realInstalledId, silent, false);
+                    if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Desinstalacion cancelada");
+                    if (realCode == 0)
+                    {
+                        EmitLog("[OK] " + app.Name + " desinstalada correctamente.");
+                        return MakeResult(app, InstallStatus.Success, "Desinstalada correctamente");
+                    }
+                    lastCode = realCode;
+                }
+
+                // 4. Respaldo MSIX / Microsoft Store via Remove-AppxPackage
+                if (realInstalledId.StartsWith("MSIX\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    string pkgFullName = realInstalledId.Substring(5).Trim();
+                    if (!string.IsNullOrEmpty(pkgFullName))
+                    {
+                        EmitLog("[*] Desinstalando paquete MSIX/Store con Remove-AppxPackage: " + pkgFullName);
+                        string ps = string.Format("Remove-AppxPackage -Package '{0}' -ErrorAction Stop", pkgFullName.Replace("'", "''"));
+                        string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(ps));
+                        StringBuilder appxOut = new StringBuilder();
+                        int appxCode = await RunProcessAsync("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded, appxOut);
+                        if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Desinstalacion cancelada");
+                        if (appxCode == 0)
+                        {
+                            EmitLog("[OK] " + app.Name + " (MSIX/Store) desinstalada correctamente.");
+                            return MakeResult(app, InstallStatus.Success, "Desinstalada correctamente");
+                        }
+                        lastCode = appxCode;
+                    }
+                }
+            }
+
+            // 5. Respaldo nativo del Registro de Windows (HKLM 64/32 y HKCU UninstallString / QuietUninstallString) — funciona 100% offline
+            int regCode = await TryRegistryUninstallAsync(app, silent);
+            if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Desinstalacion cancelada");
+            if (regCode == 0 || regCode == 3010)
+            {
+                EmitLog("[OK] " + app.Name + " desinstalada correctamente (desinstalador nativo de Windows).");
+                return MakeResult(app, InstallStatus.Success, regCode == 3010 ? "Desinstalada (puede requerir reinicio)" : "Desinstalada correctamente");
+            }
+            if (regCode != -999) lastCode = regCode;
+
+            // 6. Verificacion final: algunos desinstaladores NSIS/Inno se autoejecutan en un proceso hijo y salen con codigo distinto de 0
+            await Task.Delay(1200);
+            HashSet<string> stillInstalled = await DetectInstalledAppKeysAsync(new List<AppItem> { app });
+            string appKey = (app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty);
+            if (!stillInstalled.Contains(appKey))
+            {
+                EmitLog("[OK] " + app.Name + " verificada como desinstalada.");
+                return MakeResult(app, InstallStatus.Success, "Desinstalada correctamente");
+            }
+
+            EmitLog(string.Format("[X] No se pudo desinstalar {0} (codigo {1}).", app.Name, lastCode));
+            return MakeResult(app, InstallStatus.Failed, "No se pudo desinstalar automaticamente (codigo " + lastCode + ")");
+        }
+
+        private async Task<int> TryWingetUninstallByIdAsync(string packageId, bool silent, bool allowAllVersions)
+        {
             string silentFlag = silent ? " --silent" : string.Empty;
+            string allVerFlag = allowAllVersions ? " --all-versions" : string.Empty;
             string args = string.Format(
-                "uninstall --id \"{0}\" --exact --source {1}{2} --accept-source-agreements --disable-interactivity",
-                app.Target.Trim(),
-                pkgSource,
+                "uninstall --id \"{0}\" --exact{1}{2} --accept-source-agreements --disable-interactivity",
+                packageId.Replace("\"", string.Empty),
+                allVerFlag,
                 silentFlag);
 
             StringBuilder output = new StringBuilder();
-            int exitCode = await RunProcessAsync("winget", args, output);
-            if (_cancelRequested)
+            int code = await RunProcessAsync("winget", args, output);
+            if (_cancelRequested || code == 0) return code;
+
+            string text = output.ToString();
+            bool notFound =
+                code == -1978335212 ||
+                text.IndexOf("No installed package found", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("No se encontr", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // Si fallo en modo silencioso por culpa del instalador (NO por "no encontrado"), reintentar en modo interactivo
+            if (silent && !notFound)
             {
-                return MakeResult(app, InstallStatus.Cancelled, "Desinstalacion cancelada");
+                EmitLog("[!] El desinstalador silencioso fallo; reintentando en modo interactivo...");
+                string interactiveArgs = string.Format(
+                    "uninstall --id \"{0}\" --exact{1} --accept-source-agreements",
+                    packageId.Replace("\"", string.Empty),
+                    allVerFlag);
+                StringBuilder intOut = new StringBuilder();
+                int intCode = await RunProcessAsync("winget", interactiveArgs, intOut);
+                return intCode;
             }
-            if (exitCode == 0)
+
+            return code;
+        }
+
+        private async Task<string> FindInstalledWingetIdAsync(AppItem app)
+        {
+            try
             {
-                EmitLog("[OK] " + app.Name + " desinstalada correctamente.");
-                return MakeResult(app, InstallStatus.Success, "Desinstalada correctamente");
+                StringBuilder output = new StringBuilder();
+                int code = await RunProcessAsync("winget", "list --accept-source-agreements --disable-interactivity", output, false);
+                if (code != 0 && output.Length == 0) return string.Empty;
+
+                string[] lines = output.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                int headerIdx = -1;
+                int idCol = -1;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string line = lines[i];
+                    if (line.IndexOf("Id", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        (line.IndexOf("Version", StringComparison.OrdinalIgnoreCase) >= 0 || line.IndexOf("Versi", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        headerIdx = i;
+                        idCol = FindColumnStart(line, "Id");
+                        break;
+                    }
+                }
+                if (headerIdx < 0 || idCol <= 0) return string.Empty;
+
+                string bestId = string.Empty;
+                int bestScore = 0;
+                for (int i = headerIdx + 2; i < lines.Length; i++)
+                {
+                    string line = lines[i];
+                    if (line.Length <= idCol || line.StartsWith("---")) continue;
+                    string namePart = line.Substring(0, Math.Min(idCol, line.Length)).Trim();
+                    string rest = line.Substring(idCol).Trim();
+                    string[] tokens = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (tokens.Length == 0) continue;
+
+                    // Para IDs con espacios (ej. "ARP\Machine\X86\Google Chrome"), reconstruir hasta el token de version
+                    string entryId = tokens[0].Trim();
+                    if (entryId.StartsWith("ARP\\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        StringBuilder arpId = new StringBuilder(entryId);
+                        for (int t = 1; t < tokens.Length; t++)
+                        {
+                            string tk = tokens[t];
+                            if (char.IsDigit(tk[0]) || tk.Equals("Unknown", StringComparison.OrdinalIgnoreCase) || tk.StartsWith("<")) break;
+                            arpId.Append(' ').Append(tk);
+                        }
+                        entryId = arpId.ToString().Trim();
+                    }
+
+                    int score = ScoreUninstallMatch(app, namePart, entryId);
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestId = entryId;
+                    }
+                }
+
+                return bestScore > 0 ? bestId : string.Empty;
             }
-            EmitLog(string.Format("[X] Error desinstalando {0} (codigo {1}).", app.Name, exitCode));
-            return MakeResult(app, InstallStatus.Failed, "Error de Winget al desinstalar (codigo " + exitCode + ")");
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static int ScoreUninstallMatch(AppItem app, string installedName, string installedId)
+        {
+            string appId = (app.Id ?? string.Empty).Trim().ToLowerInvariant();
+            string appTarget = (app.Target ?? string.Empty).Trim();
+            string appName = (app.Name ?? string.Empty).Trim();
+            string normName = (installedName ?? string.Empty).Trim();
+            string normId = (installedId ?? string.Empty).Trim();
+
+            if (!string.IsNullOrEmpty(appTarget) && !string.IsNullOrEmpty(normId) &&
+                string.Equals(normId, appTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                return 100;
+            }
+
+            // Casos especiales conocidos (Store / MSIX / nombres distintos al catalogo)
+            if (appId == "discord" && (normId.IndexOf("XPDC2RH70K22MN", StringComparison.OrdinalIgnoreCase) >= 0 || NameEqualsOrPrefix(normName, "Discord"))) return 95;
+            if (appId == "spotify" && (normId.IndexOf("Spotify", StringComparison.OrdinalIgnoreCase) >= 0 || NameEqualsOrPrefix(normName, "Spotify"))) return 95;
+            if (appId == "whatsapp" && (normId.IndexOf("WhatsApp", StringComparison.OrdinalIgnoreCase) >= 0 || normId.IndexOf("9NKSQGP7F2NH", StringComparison.OrdinalIgnoreCase) >= 0 || NameEqualsOrPrefix(normName, "WhatsApp"))) return 95;
+            if (appId == "chrome" && NameEqualsOrPrefix(normName, "Google Chrome")) return 95;
+            if (appId == "operagx" && NameEqualsOrPrefix(normName, "Opera GX")) return 95;
+            if (appId == "vscode" && (NameEqualsOrPrefix(normName, "Microsoft Visual Studio Code") || NameEqualsOrPrefix(normName, "Visual Studio Code"))) return 95;
+            if (appId == "devcpp_592" && normName.IndexOf("Dev-C++", StringComparison.OrdinalIgnoreCase) >= 0 && normName.IndexOf("Embarcadero", StringComparison.OrdinalIgnoreCase) < 0) return 95;
+            if (appId == "devcpp" && normName.IndexOf("Embarcadero Dev-C++", StringComparison.OrdinalIgnoreCase) >= 0) return 95;
+            if (appId == "windsurf" && (NameEqualsOrPrefix(normName, "Windsurf") || NameEqualsOrPrefix(normName, "Devin"))) return 92;
+            if (appId == "copilot_app" && NameEqualsOrPrefix(normName, "GitHub Copilot") && normName.IndexOf("CLI", StringComparison.OrdinalIgnoreCase) < 0) return 95;
+            if (appId == "copilot_cli" && NameEqualsOrPrefix(normName, "GitHub Copilot CLI")) return 95;
+            if (appId == "claude" && NameEqualsOrPrefix(normName, "Claude") && normName.IndexOf("Code", StringComparison.OrdinalIgnoreCase) < 0) return 95;
+            if (appId == "claude_code" && NameEqualsOrPrefix(normName, "Claude Code")) return 95;
+            if (appId == "antigravity" && (NameEqualsOrPrefix(normName, "Antigravity") || NameEqualsOrPrefix(normName, "Google Antigravity")) && normName.IndexOf("IDE", StringComparison.OrdinalIgnoreCase) < 0 && normName.IndexOf("CLI", StringComparison.OrdinalIgnoreCase) < 0) return 95;
+            if (appId == "antigravity_ide" && NameEqualsOrPrefix(normName, "Antigravity IDE")) return 95;
+            if (appId == "antigravity_cli" && NameEqualsOrPrefix(normName, "Antigravity CLI")) return 95;
+            if (appId == "opencode" && NameEqualsOrPrefix(normName, "OpenCode") && normName.IndexOf("CLI", StringComparison.OrdinalIgnoreCase) < 0) return 95;
+            if (appId == "opencode_cli" && NameEqualsOrPrefix(normName, "OpenCode CLI")) return 95;
+            if (appId == "gemini" && (NameEqualsOrPrefix(normName, "Google Gemini") || NameEqualsOrPrefix(normName, "Gemini")) && normName.IndexOf("CLI", StringComparison.OrdinalIgnoreCase) < 0) return 95;
+            if (appId == "gemini_cli" && (NameEqualsOrPrefix(normName, "Gemini API CLI") || NameEqualsOrPrefix(normName, "Gemini CLI"))) return 95;
+
+            // Coincidencia segura por nombre base (sin colisionar Desktop vs CLI)
+            string cleanAppName = appName;
+            int parenIdx = cleanAppName.IndexOf('(');
+            if (parenIdx > 2) cleanAppName = cleanAppName.Substring(0, parenIdx).Trim();
+
+            if (string.Equals(normName, appName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normName, cleanAppName, StringComparison.OrdinalIgnoreCase))
+            {
+                return 90;
+            }
+            if (cleanAppName.Length >= 4 && NameEqualsOrPrefix(normName, cleanAppName))
+            {
+                bool appIsCli = appName.IndexOf("CLI", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool instIsCli = normName.IndexOf("CLI", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (appIsCli == instIsCli) return 80;
+            }
+
+            return 0;
+        }
+
+        private static bool NameEqualsOrPrefix(string candidate, string prefix)
+        {
+            if (string.IsNullOrEmpty(candidate) || string.IsNullOrEmpty(prefix)) return false;
+            if (string.Equals(candidate, prefix, StringComparison.OrdinalIgnoreCase)) return true;
+            if (candidate.StartsWith(prefix + " ", StringComparison.OrdinalIgnoreCase) ||
+                candidate.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase) ||
+                candidate.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        private bool TryRemovePortableZipInstall(AppItem app)
+        {
+            try
+            {
+                string safeId = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id);
+                string installDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Qinstall", "Tools", safeId);
+                if (!Directory.Exists(installDir)) return false;
+
+                Directory.Delete(installDir, true);
+                try
+                {
+                    string userPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? string.Empty;
+                    string[] parts = userPath.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    List<string> kept = new List<string>();
+                    for (int i = 0; i < parts.Length; i++)
+                    {
+                        if (!string.Equals(parts[i].Trim().TrimEnd('\\'), installDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                        {
+                            kept.Add(parts[i]);
+                        }
+                    }
+                    Environment.SetEnvironmentVariable("Path", string.Join(";", kept.ToArray()), EnvironmentVariableTarget.User);
+                }
+                catch { }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task<int> TryRegistryUninstallAsync(AppItem app, bool silent)
+        {
+            string quietCmd = string.Empty;
+            string normalCmd = string.Empty;
+            string matchedDisplay = string.Empty;
+            int bestScore = 0;
+
+            RegistryKey[] roots = new[] { Registry.LocalMachine, Registry.CurrentUser };
+            string[] subPaths = new[]
+            {
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            };
+
+            for (int r = 0; r < roots.Length; r++)
+            {
+                for (int s = 0; s < subPaths.Length; s++)
+                {
+                    try
+                    {
+                        using (RegistryKey baseKey = roots[r].OpenSubKey(subPaths[s]))
+                        {
+                            if (baseKey == null) continue;
+                            string[] names = baseKey.GetSubKeyNames();
+                            for (int i = 0; i < names.Length; i++)
+                            {
+                                try
+                                {
+                                    using (RegistryKey sub = baseKey.OpenSubKey(names[i]))
+                                    {
+                                        if (sub == null) continue;
+                                        string disp = sub.GetValue("DisplayName") as string;
+                                        if (string.IsNullOrWhiteSpace(disp)) continue;
+                                        int score = ScoreUninstallMatch(app, disp.Trim(), names[i]);
+                                        if (score > bestScore)
+                                        {
+                                            string q = (sub.GetValue("QuietUninstallString") as string) ?? string.Empty;
+                                            string u = (sub.GetValue("UninstallString") as string) ?? string.Empty;
+                                            if (!string.IsNullOrWhiteSpace(q) || !string.IsNullOrWhiteSpace(u))
+                                            {
+                                                bestScore = score;
+                                                quietCmd = q.Trim();
+                                                normalCmd = u.Trim();
+                                                matchedDisplay = disp.Trim();
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            if (bestScore <= 0) return -999;
+
+            EmitLog("[*] Desinstalador nativo encontrado en Registro para: " + matchedDisplay);
+            string chosen = (silent && !string.IsNullOrWhiteSpace(quietCmd)) ? quietCmd : normalCmd;
+            if (string.IsNullOrWhiteSpace(chosen)) chosen = quietCmd;
+
+            string fileName;
+            string args;
+            ParseUninstallCommand(chosen, silent, out fileName, out args);
+            if (string.IsNullOrWhiteSpace(fileName)) return -999;
+
+            EmitLog(string.Format("[*] Ejecutando: {0} {1}", fileName, args));
+            StringBuilder outBuf = new StringBuilder();
+            int code = await RunProcessAsync(fileName, args, outBuf, true, true);
+            if (_cancelRequested || code == 0 || code == 3010) return code;
+
+            // Si fallo QuietUninstallString, reintentar con UninstallString interactivo
+            if (silent && !string.IsNullOrWhiteSpace(quietCmd) && !string.IsNullOrWhiteSpace(normalCmd) &&
+                !string.Equals(quietCmd, normalCmd, StringComparison.OrdinalIgnoreCase))
+            {
+                EmitLog("[!] El desinstalador silencioso del registro fallo; intentando modo interactivo...");
+                ParseUninstallCommand(normalCmd, false, out fileName, out args);
+                if (!string.IsNullOrWhiteSpace(fileName))
+                {
+                    StringBuilder out2 = new StringBuilder();
+                    code = await RunProcessAsync(fileName, args, out2, true, true);
+                }
+            }
+
+            return code;
+        }
+
+        private static void ParseUninstallCommand(string rawCmd, bool silent, out string fileName, out string args)
+        {
+            fileName = string.Empty;
+            args = string.Empty;
+            if (string.IsNullOrWhiteSpace(rawCmd)) return;
+
+            string cmd = Environment.ExpandEnvironmentVariables(rawCmd.Trim());
+
+            // Normalizar MsiExec.exe /I{GUID} -> msiexec.exe /x {GUID} /qn /norestart
+            if (cmd.IndexOf("msiexec", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                int braceStart = cmd.IndexOf('{');
+                int braceEnd = braceStart >= 0 ? cmd.IndexOf('}', braceStart) : -1;
+                if (braceStart >= 0 && braceEnd > braceStart)
+                {
+                    string guid = cmd.Substring(braceStart, braceEnd - braceStart + 1);
+                    fileName = "msiexec.exe";
+                    args = "/x " + guid + (silent ? " /qn /norestart" : " /qb /norestart");
+                    return;
+                }
+            }
+
+            if (cmd.StartsWith("\""))
+            {
+                int close = cmd.IndexOf('\"', 1);
+                if (close > 1)
+                {
+                    fileName = cmd.Substring(1, close - 1).Trim();
+                    args = cmd.Substring(close + 1).Trim();
+                    return;
+                }
+            }
+
+            // Buscar .exe en la cadena (soporta rutas con espacios sin comillas como C:\Program Files\App\unins000.exe /S)
+            int exeIdx = cmd.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+            if (exeIdx > 0)
+            {
+                fileName = cmd.Substring(0, exeIdx + 4).Trim();
+                args = cmd.Substring(exeIdx + 4).Trim();
+                return;
+            }
+
+            int sp = cmd.IndexOf(' ');
+            if (sp > 0)
+            {
+                fileName = cmd.Substring(0, sp).Trim();
+                args = cmd.Substring(sp + 1).Trim();
+            }
+            else
+            {
+                fileName = cmd;
+                args = string.Empty;
+            }
         }
 
         public async Task<InstallResult> UpgradeSingleAppAsync(AppItem app, bool silent)
@@ -1304,7 +1714,7 @@ namespace Qinstall
             if (id == "claude") return HasBaseAppExcluding(installedNames, "Claude", "Claude Code", "Claude Science");
             if (id == "claude_code") return AnyNameStartsWith(installedNames, "Claude Code");
             if (id == "cursor") return AnyNameEqualsOrPrefix(installedNames, "Cursor");
-            if (id == "windsurf") return AnyNameEqualsOrPrefix(installedNames, "Windsurf");
+            if (id == "windsurf") return AnyNameEqualsOrPrefix(installedNames, "Windsurf") || AnyNameEqualsOrPrefix(installedNames, "Devin");
             if (id == "trae") return AnyNameEqualsOrPrefix(installedNames, "Trae");
             if (id == "perplexity_comet") return AnyNameEqualsOrPrefix(installedNames, "Comet") || AnyNameStartsWith(installedNames, "Perplexity");
             if (id == "ollama") return AnyNameEqualsOrPrefix(installedNames, "Ollama");

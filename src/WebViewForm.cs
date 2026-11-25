@@ -1436,12 +1436,6 @@ namespace Qinstall
             }
             if (target == null) return;
 
-            if (!_wingetAvailable)
-            {
-                PostToast("Winget no esta disponible para desinstalar.", "warn");
-                return;
-            }
-
             _isBusy = true;
             _engine.ResetCancellation();
             InstallResult res;
