@@ -192,6 +192,9 @@ namespace Qinstall
                     case "purgeCache":
                         HandlePurgeCache(GetBool(msg, "includeOfflineCache"));
                         break;
+                    case "purgeOutdated":
+                        HandlePurgeOutdated(msg);
+                        break;
                     case "setWindowTheme":
                         ApplyNativeTitlebarTheme(GetBool(msg, "dark"));
                         break;
@@ -752,6 +755,43 @@ namespace Qinstall
             {
                 PostToast("No se pudo abrir la carpeta local\\: " + ex.Message, "warn");
             }
+        }
+
+        private void HandlePurgeOutdated(Dictionary<string, object> msg)
+        {
+            if (_isBusy) return;
+            List<string> keys = GetStringList(msg, "keys");
+            if (keys.Count == 0)
+            {
+                foreach (string k in _outdatedCaches.Keys) keys.Add(k);
+            }
+
+            if (keys.Count == 0)
+            {
+                PostToast("No hay instaladores descargados obsoletos para purgar.", "info");
+                return;
+            }
+
+            long freedBytes = 0;
+            int purgedCount = 0;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                OfflineCacheUpdateInfo info;
+                if (_outdatedCaches.TryGetValue(keys[i], out info))
+                {
+                    string cacheDir = InstallerEngine.GetOfflineCacheDirForApp(info.App);
+                    freedBytes += DeleteDirectoryContents(cacheDir);
+                    try { if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true); } catch { }
+                    _outdatedCaches.Remove(keys[i]);
+                    purgedCount++;
+                }
+            }
+
+            double mb = freedBytes / (1024.0 * 1024.0);
+            PostStateUpdate();
+            string text = string.Format("Se purgaron {0} instalador(es) obsoleto(s) ({1:0.0} MB liberados).", purgedCount, mb);
+            PostLog(text, "success");
+            PostToast(text, "success");
         }
 
         private void HandlePurgeCache(bool includeOfflineCache)

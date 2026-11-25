@@ -230,7 +230,7 @@ function startSmoothLoader(waitForBackend) {
     }
 
     if (bar) bar.style.width = pct.toFixed(2) + '%';
-    if (runner) runner.style.left = pct.toFixed(2) + '%';
+    if (runner) runner.style.left = `clamp(16px, ${pct.toFixed(2)}%, calc(100% - 16px))`;
 
     const dotIdx = pct < 25 ? 0 : (pct < 55 ? 1 : (pct < 85 ? 2 : 3));
     if (dotIdx !== lastDot) {
@@ -373,13 +373,13 @@ function getBadgesHtml(app) {
 
   if (app.installed) return '<span class="badge badge-installed">INSTALADO</span>';
   if (app.outdated) return '<span class="badge badge-update">ACTUALIZAR</span>';
-  if (app.hasOffline && !app.requiresInternet) return '<span class="badge badge-offline">OFFLINE</span>';
+  if (app.hasOffline && !app.requiresInternet) return '<span class="badge badge-offline">DESCARGADO</span>';
   if (!state.env.hasInternet && app.requiresInternet) return '<span class="badge badge-nonet">SIN RED</span>';
   if (src === 'winget') return '<span class="badge badge-online">ONLINE</span>';
   if (src === 'url') return '<span class="badge badge-url">URL</span>';
   return app.requiresInternet
     ? '<span class="badge badge-online">ONLINE</span>'
-    : '<span class="badge badge-offline">OFFLINE</span>';
+    : '<span class="badge badge-offline">DESCARGADO</span>';
 }
 
 function getAppTooltip(app) {
@@ -874,7 +874,7 @@ function startOrCancelInstall() {
   const silent = document.getElementById('chkSilent').checked;
   const upgrade = document.getElementById('chkUpgrade').checked;
   const rows = apps.map(a => {
-    const modeTag = a.hasOffline && !a.requiresInternet ? 'OFFLINE' : (a.source === 'powershell' ? 'TOOL' : 'ONLINE');
+    const modeTag = a.hasOffline && !a.requiresInternet ? 'DESCARGADO' : (a.source === 'powershell' ? 'TOOL' : 'ONLINE');
     return `<div class="dialog-row-ok">• ${escapeHtml(a.name)} <span style="opacity:0.65;">[${modeTag}]</span></div>`;
   }).join('');
 
@@ -971,7 +971,7 @@ function setStatusText(text, pct) {
   if (typeof pct === 'number') {
     const safe = Math.max(0, Math.min(100, pct));
     if (bar) bar.style.width = safe + '%';
-    if (runner) runner.style.left = safe + '%';
+    if (runner) runner.style.left = `clamp(16px, ${safe}%, calc(100% - 16px))`;
     if (pctEl) pctEl.textContent = safe + '%';
   }
 }
@@ -1036,35 +1036,37 @@ function saveSettings() {
 function confirmPurgeOfflineCache() {
   toggleSettingsModal();
   openDialogModal(
-    'Vaciar caché offline',
-    `<p style="font-size:13px; color:var(--text-secondary);">Se eliminarán todos los instaladores descargados en <b>local\\cache\\</b> y temporales. Los instaladores que colocaste manualmente en <b>local\\</b> y <b>office\\</b> no se borrarán.</p>`,
+    'Eliminar instaladores descargados',
+    `<p style="font-size:13px; color:var(--text-secondary);">Se eliminarán todos los instaladores descargados con <b>Descargar offline</b> en <b>local\\cache\\</b>. Los instaladores que agregaste manualmente en <b>local\\</b> y <b>office\\</b> se conservarán.</p>`,
     `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
-     <button class="btn-install cancel-mode" style="height:34px;padding:0 16px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'purgeCache', includeOfflineCache: true })">Vaciar caché</button>`
+     <button class="btn-install cancel-mode" style="height:34px;padding:0 16px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'purgeCache', includeOfflineCache: true })">Eliminar descargados</button>`
   );
 }
 
 function showOutdatedModal(items, isMandatoryBlock, silent, upgrade) {
   if (!items || items.length === 0) return;
   const rows = items.map(it =>
-    `<div class="dialog-row-warn">• ${escapeHtml(it.name)}: local v${escapeHtml(it.localVersion)} → nueva v${escapeHtml(it.latestVersion)}</div>`
+    `<div class="dialog-row-warn">• ${escapeHtml(it.name)}: descargado v${escapeHtml(it.localVersion)} → nueva v${escapeHtml(it.latestVersion)}</div>`
   ).join('');
 
   const keys = items.map(it => it.key);
   const title = isMandatoryBlock
-    ? 'Reemplazo obligatorio de instalador local'
-    : 'Instaladores locales desactualizados';
+    ? 'Instaladores desactualizados — Purga requerida'
+    : 'Nueva versión detectada para instaladores descargados';
   const desc = isMandatoryBlock
-    ? 'Hay una versión más nueva para estos instaladores locales y <b>debes reemplazarlos</b> antes de instalar:'
-    : 'Se detectaron instaladores locales antiguos en tu pendrive. Debes reemplazarlos por la última versión:';
+    ? 'Para un buen funcionamiento, <b>debes purgar y reemplazar</b> estos instaladores descargados antiguos antes de instalar:'
+    : 'Salió una nueva versión para estos instaladores descargados en tu pendrive. Conviene purgar los antiguos o reemplazarlos ahora para buen funcionamiento:';
+
+  const purgeOnlyBtn = `<button class="btn-header" onclick="closeDialogModal(); postToHost({ action: 'purgeOutdated', keys: ${escapeHtml(JSON.stringify(keys))} })">Purgar antiguos</button>`;
 
   const actionBtn = isMandatoryBlock
-    ? `<button class="btn-install" style="height:34px;padding:0 16px;font-size:12.5px;" onclick="confirmMandatoryReplace(${!!silent}, ${!!upgrade})">Reemplazar e Instalar</button>`
-    : `<button class="btn-offline-dl" style="height:34px;padding:0 16px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'replaceOutdated', keys: ${escapeHtml(JSON.stringify(keys))} })">Reemplazar ahora</button>`;
+    ? `<button class="btn-install" style="height:34px;padding:0 16px;font-size:12.5px;" onclick="confirmMandatoryReplace(${!!silent}, ${!!upgrade})">Purgar, reemplazar e instalar</button>`
+    : `<button class="btn-offline-dl" style="height:34px;padding:0 16px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'replaceOutdated', keys: ${escapeHtml(JSON.stringify(keys))} })">Purgar y descargar nuevos</button>`;
 
   openDialogModal(
     title,
     `<p style="font-size:13px; color:var(--text-secondary);">${desc}</p><div class="dialog-list">${rows}</div>`,
-    `<button class="btn-header" onclick="closeDialogModal()">${isMandatoryBlock ? 'Cancelar instalación' : 'Más tarde'}</button>${actionBtn}`
+    `<button class="btn-header" onclick="closeDialogModal()">${isMandatoryBlock ? 'Cancelar' : 'Después'}</button>${purgeOnlyBtn}${actionBtn}`
   );
 }
 

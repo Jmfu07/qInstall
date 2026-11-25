@@ -288,7 +288,7 @@
               </th>
               <th>Aplicación</th>
               <th>Categoría</th>
-              <th>Caché / Local</th>
+              <th>Instalador Local</th>
               <th>Origen</th>
               <th>Estado</th>
               <th style="text-align: right;">Acción</th>
@@ -441,10 +441,11 @@
         </div>
 
         <div class="settings-group">
-          <div class="settings-group-title">Mantenimiento &amp; Apariencia</div>
+          <div class="settings-group-title">Instaladores Descargados &amp; Apariencia</div>
+          <div class="settings-desc">Si sale una nueva versión de un instalador guardado en el pendrive, conviene purgar el antiguo para evitar conflictos.</div>
           <div class="settings-actions-row">
-            <button class="btn-tool" onclick="postToHost({ action: 'purgeCache', includeOfflineCache: false })"><i data-lucide="trash-2" style="width: 14px;"></i> Purgar temporales</button>
-            <button class="btn-tool" onclick="confirmPurgeOfflineCache()"><i data-lucide="hard-drive" style="width: 14px;"></i> Vaciar caché offline</button>
+            <button class="btn-tool" onclick="postToHost({ action: 'purgeOutdated' })"><i data-lucide="sparkles" style="width: 14px;"></i> Purgar instaladores obsoletos</button>
+            <button class="btn-tool" onclick="confirmPurgeOfflineCache()"><i data-lucide="trash-2" style="width: 14px;"></i> Eliminar instaladores descargados</button>
             <button class="btn-tool" onclick="replayLoadingScreen()"><i data-lucide="play-circle" style="width: 14px;"></i> Ver Pantalla de Carga</button>
           </div>
         </div>
