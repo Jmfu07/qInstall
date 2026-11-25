@@ -940,6 +940,7 @@ namespace Qinstall
             if (id == "nvcleanstall") return AnyNameStartsWith(installedNames, "NVCleanstall");
             if (id == "nvidia_app") return AnyNameStartsWith(installedNames, "NVIDIA App") || AnyNameStartsWith(installedNames, "NVIDIA GeForce Experience");
             if (id == "nvidia_physx") return AnyNameStartsWith(installedNames, "NVIDIA PhysX");
+            if (id == "sdio") return AnyNameStartsWith(installedNames, "Snappy Driver Installer");
             if (id == "msi_afterburner") return AnyNameStartsWith(installedNames, "MSI Afterburner");
             if (id == "intel_dsa") return AnyNameStartsWith(installedNames, "Intel") && AnyNameMatchesAll(installedNames, "Intel", "Driver", "Support");
             if (id == "malwarebytes") return AnyNameStartsWith(installedNames, "Malwarebytes");

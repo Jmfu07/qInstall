@@ -432,6 +432,26 @@
       "Essential": false
     },
     {
+      "Id": "amd_autodetect",
+      "Name": "AMD Drivers Auto-Detect (Radeon + Chipset)",
+      "Category": "Soporte y Drivers",
+      "Description": "Detecta tu GPU/CPU AMD en este equipo y abre el instalador oficial AMD Software Adrenalin / Chipset",
+      "Source": "powershell",
+      "Target": "Write-Host '=== Hardware AMD detectado en este equipo ===' -ForegroundColor Cyan; Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion | Format-Table -AutoSize; Get-CimInstance Win32_Processor | Select-Object Name | Format-Table -AutoSize; Write-Host 'Abriendo portal oficial de AMD Software Auto-Detect & Install...' -ForegroundColor Green; Start-Process 'https://www.amd.com/en/support/download/drivers.html'; Write-Host 'Nota: RDNA (RX 5000/6000/7000/9000 y Ryzen) usa Adrenalin actual; Polaris/Vega (RX 400/500) o GCN antiguas usan rama legacy o SDIO.' -ForegroundColor Yellow; Read-Host 'Presiona Enter para cerrar'",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "sdio",
+      "Name": "Snappy Driver Installer Origin (SDIO)",
+      "Category": "Soporte y Drivers",
+      "Description": "Instalador universal portable de drivers para cualquier PC (Red, Audio, Chipset, GPUs antiguas y modernas)",
+      "Source": "winget",
+      "Target": "GlennDelahoy.SnappyDriverInstallerOrigin",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "msi_afterburner",
       "Name": "MSI Afterburner",
       "Category": "Soporte y Drivers",
