@@ -6,7 +6,8 @@ Instalador rápido, ligero y portable de aplicaciones para Windows (alternativa 
 
 - **100% Portable y sin dependencias**: Genera un único `Qinstall.exe` de menos de 100 KB que usa el `.NET Framework 4.8` incluido de fábrica en Windows 10 y 11.
 - **Modo Online con Winget**: Descarga e instala siempre la última versión oficial de cada programa de forma silenciosa y sin bloatware. Si el equipo no tiene Winget, ofrece instalarlo con un clic.
-- **Instaladores locales offline (`local/`)**: Agrega cualquier `.exe` o `.msi` con el botón **`+ Instalador local`** (que lo copia automáticamente a `local\`) o pégalo directo en la carpeta `local\` para usarlo en equipos sin Internet.
+- **Modo descarga offline para pendrive (`Descargar offline`)**: Marca cualquier aplicación (Winget, URL u Office) y descárgala directamente en `local/cache/` (o `office/Office/Data/` para Office) sin instalarla en tu PC; cuando lleves el pendrive a un equipo sin Internet, Qinstall detectará automáticamente esos instaladores (`OFFLINE`) y los instalará localmente.
+- **Instaladores locales offline (`local/`)**: Agrega cualquier `.exe` o `.msi` propio con **`+ Instalador local`** o pégalo en `local\`.
 - **Validación automática Online / Offline**: Detecta en vivo si el equipo tiene conexión a Internet y valida qué aplicaciones dependen de red (Winget, URLs, Office ODT sin datos offline, scripts remotos) frente a instaladores locales 100% offline.
 - **Buscador integrado (Catálogo + Winget online)**: Escribe en `Buscar:` para filtrar tus apps o buscar e instalar al vuelo cualquier programa de Winget.
 - **Microsoft Office integrado (2016, 2019, 2021 y 2024)**: Incluye Microsoft Office Deployment Tool (`office/setup.exe`) junto con las configuraciones `office2016.xml`, `office2019.xml`, `office2021.xml` y `office2024.xml`.

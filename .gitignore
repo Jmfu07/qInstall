@@ -2,6 +2,8 @@
 !office/setup.exe
 local/*.exe
 local/*.msi
+local/cache/
+office/Office/
 *.pdb
 *.bak
 *.log

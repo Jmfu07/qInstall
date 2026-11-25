@@ -139,7 +139,7 @@ namespace Qinstall
             string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
             if (src == "winget" || src == "url")
             {
-                return true;
+                return !HasOfflineCache(app);
             }
             if (src == "powershell")
             {
@@ -153,21 +153,265 @@ namespace Qinstall
                 string args = app.SilentArgs ?? string.Empty;
                 if (args.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
-                    string resolved = ResolveLocalPath((app.Target ?? string.Empty).Trim());
-                    if (!string.IsNullOrEmpty(resolved))
-                    {
-                        string dir = Path.GetDirectoryName(resolved);
-                        string offlineData = Path.Combine(dir, "Office", "Data");
-                        if (Directory.Exists(offlineData))
-                        {
-                            return false;
-                        }
-                    }
-                    return true;
+                    return !HasOfflineOfficePayload(app);
                 }
                 return false;
             }
             return true;
+        }
+
+        public static bool CanDownloadOffline(AppItem app)
+        {
+            if (app == null) return false;
+            string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src == "winget" || src == "url") return true;
+            if (src == "local")
+            {
+                string args = app.SilentArgs ?? string.Empty;
+                return args.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            return false;
+        }
+
+        public static string GetOfflineCacheDirForApp(AppItem app)
+        {
+            string safeKey = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id);
+            return Path.Combine(AppCatalog.GetLocalInstallersDirectory(), "cache", safeKey);
+        }
+
+        public static bool HasOfflineCache(AppItem app)
+        {
+            if (app == null) return false;
+            string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src == "local")
+            {
+                string args = app.SilentArgs ?? string.Empty;
+                if (args.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return HasOfflineOfficePayload(app);
+                }
+                return !string.IsNullOrEmpty(ResolveLocalPath((app.Target ?? string.Empty).Trim()));
+            }
+            return !string.IsNullOrEmpty(FindCachedInstallerPath(app));
+        }
+
+        private static bool HasOfflineOfficePayload(AppItem app)
+        {
+            string resolved = ResolveLocalPath((app.Target ?? string.Empty).Trim());
+            if (string.IsNullOrEmpty(resolved)) return false;
+            string dir = Path.GetDirectoryName(resolved);
+            string offlineData = Path.Combine(dir, "Office", "Data");
+            return Directory.Exists(offlineData);
+        }
+
+        public static string FindCachedInstallerPath(AppItem app)
+        {
+            if (app == null) return null;
+            string safeKey = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id);
+            string relDir = Path.Combine("local", "cache", safeKey);
+
+            // Buscar primero en carpeta local del ejecutable, luego raiz y unidades USB
+            List<string> candidateDirs = new List<string>();
+            string baseDir = AppCatalog.GetAppBaseDirectory();
+            candidateDirs.Add(Path.Combine(baseDir, relDir));
+            try
+            {
+                string root = Path.GetPathRoot(baseDir);
+                if (!string.IsNullOrEmpty(root)) candidateDirs.Add(Path.Combine(root, relDir));
+            }
+            catch { }
+            try
+            {
+                DriveInfo[] drives = DriveInfo.GetDrives();
+                for (int i = 0; i < drives.Length; i++)
+                {
+                    if (drives[i].DriveType == DriveType.Removable && drives[i].IsReady)
+                    {
+                        candidateDirs.Add(Path.Combine(drives[i].RootDirectory.FullName, relDir));
+                    }
+                }
+            }
+            catch { }
+
+            for (int d = 0; d < candidateDirs.Count; d++)
+            {
+                string dir = candidateDirs[d];
+                if (!Directory.Exists(dir)) continue;
+                try
+                {
+                    string[] files = Directory.GetFiles(dir);
+                    string fallbackExe = null;
+                    for (int f = 0; f < files.Length; f++)
+                    {
+                        string ext = Path.GetExtension(files[f]).ToLowerInvariant();
+                        if (ext == ".msi" || ext == ".exe")
+                        {
+                            FileInfo fi = new FileInfo(files[f]);
+                            if (fi.Length > 0)
+                            {
+                                if (ext == ".msi") return files[f];
+                                fallbackExe = files[f];
+                            }
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(fallbackExe)) return fallbackExe;
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private static string ExtractSilentArgsFromCachedYaml(string installerPath)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(installerPath);
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return string.Empty;
+                string[] yamls = Directory.GetFiles(dir, "*.yaml");
+                for (int i = 0; i < yamls.Length; i++)
+                {
+                    string[] lines = File.ReadAllLines(yamls[i], Encoding.UTF8);
+                    for (int l = 0; l < lines.Length; l++)
+                    {
+                        string trimmed = lines[l].Trim();
+                        if (trimmed.StartsWith("Silent:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            string val = trimmed.Substring(7).Trim().Trim('\'', '"');
+                            if (!string.IsNullOrEmpty(val)) return val;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return string.Empty;
+        }
+
+        public async Task<InstallResult> DownloadForOfflineAsync(AppItem app)
+        {
+            if (_cancelRequested)
+            {
+                return MakeResult(app, InstallStatus.Cancelled, "Cancelado");
+            }
+
+            string source = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            EmitLog("--------------------------------------------------");
+            EmitLog(string.Format("[*] Descargando para modo offline: {0}", app.Name));
+
+            try
+            {
+                if (source == "winget")
+                {
+                    string cacheDir = GetOfflineCacheDirForApp(app);
+                    Directory.CreateDirectory(cacheDir);
+                    ClearDirectoryFiles(cacheDir);
+
+                    string args = string.Format(
+                        "download --id \"{0}\" --exact --source winget -d \"{1}\" --accept-package-agreements --accept-source-agreements --skip-dependencies --disable-interactivity",
+                        app.Target.Trim(),
+                        cacheDir);
+
+                    StringBuilder output = new StringBuilder();
+                    int code = await RunProcessAsync("winget", args, output);
+                    if (_cancelRequested)
+                    {
+                        return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
+                    }
+
+                    string downloadedFile = FindCachedInstallerPath(app);
+                    if (code == 0 && !string.IsNullOrEmpty(downloadedFile))
+                    {
+                        EmitLog("[OK] Guardado offline en: " + downloadedFile);
+                        return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(downloadedFile) + ")");
+                    }
+
+                    EmitLog("[X] No se pudo descargar instalador offline para " + app.Name + " (codigo " + code + ").");
+                    return MakeResult(app, InstallStatus.Failed, "Winget no pudo descargar el instalador (codigo " + code + ")");
+                }
+
+                if (source == "url")
+                {
+                    string cacheDir = GetOfflineCacheDirForApp(app);
+                    Directory.CreateDirectory(cacheDir);
+                    ClearDirectoryFiles(cacheDir);
+
+                    string ext = ".exe";
+                    try
+                    {
+                        Uri uri = new Uri(app.Target.Trim());
+                        string urlExt = Path.GetExtension(uri.AbsolutePath);
+                        if (!string.IsNullOrWhiteSpace(urlExt) && urlExt.Length <= 5) ext = urlExt;
+                    }
+                    catch
+                    {
+                        return MakeResult(app, InstallStatus.Failed, "URL invalida");
+                    }
+
+                    string safeId = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id);
+                    string destFile = Path.Combine(cacheDir, safeId + ext);
+                    bool ok = await DownloadFileAsync(app.Target.Trim(), destFile);
+                    if (_cancelRequested)
+                    {
+                        TryDeleteFile(destFile);
+                        return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
+                    }
+                    if (ok && File.Exists(destFile))
+                    {
+                        EmitLog("[OK] Guardado offline en: " + destFile);
+                        return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(destFile) + ")");
+                    }
+                    return MakeResult(app, InstallStatus.Failed, "Fallo la descarga desde URL");
+                }
+
+                if (source == "local")
+                {
+                    string args = (app.SilentArgs ?? string.Empty).Trim();
+                    if (args.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        string setupPath = ResolveLocalPath((app.Target ?? string.Empty).Trim());
+                        if (string.IsNullOrEmpty(setupPath))
+                        {
+                            return MakeResult(app, InstallStatus.Failed, "No se encontro office\\setup.exe");
+                        }
+                        string dlArgs = args.Replace("/configure", "/download").Replace("/CONFIGURE", "/download");
+                        EmitLog("[*] Descargando archivos offline de Office (puede tardar varios minutos)...");
+                        StringBuilder outBuf = new StringBuilder();
+                        int code = await RunProcessAsync(setupPath, dlArgs, outBuf, true, true);
+                        if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
+                        if (code == 0)
+                        {
+                            EmitLog("[OK] Archivos offline de Office guardados en office\\Office\\Data.");
+                            return MakeResult(app, InstallStatus.Success, "Paquete offline de Office descargado");
+                        }
+                        return MakeResult(app, InstallStatus.Failed, "Error descargando Office (codigo " + code + ")");
+                    }
+
+                    return MakeResult(app, InstallStatus.AlreadyInstalled, "Ya es un instalador local offline");
+                }
+
+                return MakeResult(app, InstallStatus.Failed, "Esta herramienta requiere Internet y no se descarga como instalador offline");
+            }
+            catch (Exception ex)
+            {
+                EmitLog("[X] Error descargando " + app.Name + ": " + ex.Message);
+                return MakeResult(app, InstallStatus.Failed, ex.Message);
+            }
+        }
+
+        private static void ClearDirectoryFiles(string dir)
+        {
+            try
+            {
+                string[] files = Directory.GetFiles(dir);
+                for (int i = 0; i < files.Length; i++)
+                {
+                    try { File.Delete(files[i]); } catch { }
+                }
+            }
+            catch
+            {
+            }
         }
 
         public void ResetCancellation()
@@ -734,6 +978,24 @@ namespace Qinstall
 
             try
             {
+                // Si ya existe un instalador descargado en local\cache\, instalar directo desde ahi (rapido y 100% offline)
+                if (source == "winget" || source == "url")
+                {
+                    string cachedFile = FindCachedInstallerPath(app);
+                    if (!string.IsNullOrEmpty(cachedFile))
+                    {
+                        EmitLog("[*] Instalador offline encontrado en cache local: " + cachedFile);
+                        AppItem cachedApp = new AppItem();
+                        cachedApp.Id = app.Id;
+                        cachedApp.Name = app.Name;
+                        cachedApp.Source = "local";
+                        cachedApp.Target = cachedFile;
+                        string yamlArgs = ExtractSilentArgsFromCachedYaml(cachedFile);
+                        cachedApp.SilentArgs = !string.IsNullOrWhiteSpace(yamlArgs) ? yamlArgs : app.SilentArgs;
+                        return await ExecuteInstallerFileAsync(cachedApp, cachedFile, silent);
+                    }
+                }
+
                 if (source == "winget")
                 {
                     return await InstallViaWingetAsync(app, silent, upgradeIfExists);

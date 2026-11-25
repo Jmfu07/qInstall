@@ -54,6 +54,7 @@ namespace Qinstall
         private CheckBox _chkUpgrade;
         private ProgressBar _progressBar;
         private Label _lblStatus;
+        private Button _btnDownloadOffline;
         private Button _btnInstall;
         private Button _btnToggleLog;
         private ToolTip _toolTip;
@@ -259,25 +260,33 @@ namespace Qinstall
             _btnToggleLog = CreateFlatButton("Mostrar consola", 118, 26, _bgControl);
             _btnToggleLog.Font = new Font("Segoe UI", 8.5f);
             _btnToggleLog.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            _btnToggleLog.Location = new Point(pnlFooter.Width - 360, 10);
+            _btnToggleLog.Location = new Point(pnlFooter.Width - 522, 10);
             _btnToggleLog.Click += BtnToggleLog_Click;
             pnlFooter.Controls.Add(_btnToggleLog);
 
             _lblStatus = new Label();
-            _lblStatus.Text = "Listo. Marca los programas que deseas instalar y presiona Instalar.";
+            _lblStatus.Text = "Listo. Marca los programas que deseas instalar o descargar para modo offline.";
             _lblStatus.ForeColor = _textMuted;
             _lblStatus.Font = new Font("Segoe UI", 8.8f);
             _lblStatus.Location = new Point(20, 42);
-            _lblStatus.Size = new Size(760, 20);
+            _lblStatus.Size = new Size(595, 20);
             _lblStatus.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             pnlFooter.Controls.Add(_lblStatus);
 
             _progressBar = new ProgressBar();
             _progressBar.Location = new Point(20, 65);
-            _progressBar.Size = new Size(760, 18);
+            _progressBar.Size = new Size(595, 18);
             _progressBar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _progressBar.Style = ProgressBarStyle.Continuous;
             pnlFooter.Controls.Add(_progressBar);
+
+            _btnDownloadOffline = CreateFlatButton("Descargar offline", 156, 46, Color.FromArgb(40, 108, 196));
+            _btnDownloadOffline.Font = new Font("Segoe UI Semibold", 9.8f);
+            _btnDownloadOffline.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _btnDownloadOffline.Location = new Point(pnlFooter.Width - 396, 34);
+            _toolTip.SetToolTip(_btnDownloadOffline, "Descarga los instaladores en local\\cache\\ para llevarlos en tu pendrive sin instalarlos en esta PC");
+            _btnDownloadOffline.Click += BtnDownloadOffline_Click;
+            pnlFooter.Controls.Add(_btnDownloadOffline);
 
             _btnInstall = CreateFlatButton("Instalar seleccionadas", 210, 46, _accentGreen);
             _btnInstall.Font = new Font("Segoe UI Semibold", 10.5f);
@@ -804,6 +813,16 @@ namespace Qinstall
             }
 
             bool needsNet = InstallerEngine.AppRequiresInternet(app);
+            bool hasOffline = InstallerEngine.HasOfflineCache(app);
+
+            if (hasOffline && !needsNet)
+            {
+                lblTag.Text = "OFFLINE";
+                lblTag.BackColor = Color.FromArgb(22, 92, 82);
+                lblTag.ForeColor = Color.FromArgb(150, 245, 225);
+                return;
+            }
+
             if (!_hasInternet && needsNet)
             {
                 lblTag.Text = "SIN RED";
@@ -990,6 +1009,107 @@ namespace Qinstall
             _logVisible = !_logVisible;
             _pnlLogContainer.Visible = _logVisible;
             _btnToggleLog.Text = _logVisible ? "Ocultar consola" : "Mostrar consola";
+        }
+
+        private async void BtnDownloadOffline_Click(object sender, EventArgs e)
+        {
+            if (_isInstalling)
+            {
+                if (_cancelPending) return;
+                _cancelPending = true;
+                _btnInstall.Text = "Cancelando...";
+                _btnInstall.BackColor = Color.FromArgb(140, 55, 62);
+                _lblStatus.Text = "Cancelando descarga...";
+                _engine.CancelCurrent();
+                return;
+            }
+
+            List<AppItem> selected = GetSelectedApps();
+            if (selected.Count == 0)
+            {
+                MessageBox.Show(this, "Marca las aplicaciones que deseas descargar para llevarlas offline en tu pendrive.", "Descargar offline", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _lblStatus.Text = "Verificando conexion a Internet...";
+            bool onlineNow = await InstallerEngine.CheckInternetAsync();
+            UpdateInternetBadge(onlineNow);
+            if (!onlineNow)
+            {
+                MessageBox.Show(this, "Necesitas conexion a Internet para descargar los instaladores al pendrive.", "Sin Internet", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _lblStatus.Text = "Sin conexion a Internet.";
+                return;
+            }
+
+            List<AppItem> downloadable = new List<AppItem>();
+            List<AppItem> unsupported = new List<AppItem>();
+            for (int i = 0; i < selected.Count; i++)
+            {
+                if (InstallerEngine.CanDownloadOffline(selected[i]))
+                    downloadable.Add(selected[i]);
+                else
+                    unsupported.Add(selected[i]);
+            }
+
+            if (downloadable.Count == 0)
+            {
+                MessageBox.Show(this, "Las opciones seleccionadas son herramientas interactivas o ya son archivos locales offline.", "Descargar offline", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (unsupported.Count > 0)
+            {
+                StringBuilder sbSkip = new StringBuilder();
+                for (int i = 0; i < unsupported.Count; i++) sbSkip.AppendLine(" - " + unsupported[i].Name);
+                DialogResult cont = MessageBox.Show(
+                    this,
+                    "Estas opciones no se descargan como instalador offline y se omitiran:\n" + sbSkip.ToString() +
+                    string.Format("\n¿Descargar las {0} aplicaciones compatibles a la carpeta local\\cache\\?", downloadable.Count),
+                    "Descargar offline",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+                if (cont != DialogResult.Yes) return;
+            }
+
+            _isInstalling = true;
+            _cancelPending = false;
+            _engine.ResetCancellation();
+            SetUiBusyState(true);
+
+            _progressBar.Minimum = 0;
+            _progressBar.Maximum = downloadable.Count * 100;
+            _progressBar.Value = 0;
+
+            List<InstallResult> results = new List<InstallResult>();
+            for (int i = 0; i < downloadable.Count; i++)
+            {
+                AppItem app = downloadable[i];
+                _lblStatus.Text = string.Format("Descargando offline ({0}/{1}): {2}...", i + 1, downloadable.Count, app.Name);
+                _progressBar.Value = i * 100;
+
+                InstallResult res = await _engine.DownloadForOfflineAsync(app);
+                results.Add(res);
+
+                if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                {
+                    string key = GetAppKey(app);
+                    _selectedState[key] = false;
+                    CheckBox cb;
+                    if (_appCheckboxes.TryGetValue(key, out cb)) cb.Checked = false;
+                    Label tagLbl;
+                    if (_appTagLabels.TryGetValue(key, out tagLbl)) ApplyTagStyle(tagLbl, app, _installedApps.Contains(key));
+                    UpdateSelectedCounter();
+                }
+
+                if (res.Status == InstallStatus.Cancelled) break;
+                _progressBar.Value = (i + 1) * 100;
+            }
+
+            _isInstalling = false;
+            _cancelPending = false;
+            SetUiBusyState(false);
+
+            ShowSummary(results, true);
         }
 
         private async void BtnInstall_Click(object sender, EventArgs e)
@@ -1194,19 +1314,21 @@ namespace Qinstall
 
             if (busy)
             {
+                _btnDownloadOffline.Visible = false;
                 _btnInstall.Text = "Cancelar";
                 _btnInstall.BackColor = _accentRed;
                 _btnInstall.ForeColor = Color.White;
             }
             else
             {
+                _btnDownloadOffline.Visible = true;
                 _btnInstall.Text = "Instalar seleccionadas";
                 _btnInstall.BackColor = _accentGreen;
                 _btnInstall.ForeColor = Color.White;
             }
         }
 
-        private void ShowSummary(List<InstallResult> results)
+        private void ShowSummary(List<InstallResult> results, bool isOfflineDownload = false)
         {
             int okCount = 0;
             int alreadyCount = 0;
@@ -1226,9 +1348,9 @@ namespace Qinstall
                 sb.AppendLine(string.Format("{0} {1}: {2}", icon, r.App.Name, r.Message));
             }
 
-            string headline = string.Format(
-                "Finalizado — Instaladas: {0} | Ya al dia: {1} | Fallidas: {2}",
-                okCount, alreadyCount, failCount);
+            string headline = isOfflineDownload
+                ? string.Format("Descarga offline finalizada — Guardadas: {0} | Fallidas: {1}", okCount + alreadyCount, failCount)
+                : string.Format("Finalizado — Instaladas: {0} | Ya al dia: {1} | Fallidas: {2}", okCount, alreadyCount, failCount);
 
             _lblStatus.Text = headline;
             AppendLog("==================================================");
@@ -1237,7 +1359,7 @@ namespace Qinstall
             MessageBox.Show(
                 this,
                 headline + "\n\n" + sb.ToString(),
-                "Resumen de instalacion — Qinstall",
+                isOfflineDownload ? "Resumen de descarga offline — Qinstall" : "Resumen de instalacion — Qinstall",
                 MessageBoxButtons.OK,
                 failCount > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
         }
