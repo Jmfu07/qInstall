@@ -79,6 +79,68 @@ const CATEGORY_ICONS = {
   'resultados online (winget)': 'globe'
 };
 
+const APP_ICON_ALIASES = {
+  office2024: 'office',
+  office2021: 'office',
+  office2019: 'office',
+  office2016: 'office',
+  codex_cli: 'chatgpt',
+  claude_code: 'claude',
+  gemini_cli: 'gemini',
+  antigravity_ide: 'antigravity',
+  antigravity_cli: 'antigravity',
+  opencode_cli: 'opencode',
+  copilot_app: 'copilot',
+  copilot_cli: 'copilot',
+  intellij_community: 'intellij',
+  pycharm_community: 'pycharm',
+  eclipse_jee: 'eclipse',
+  eclipse_cpp: 'eclipse',
+  devcpp_592: 'devcpp',
+  vcredist_aio: 'vcredist',
+  vcredist_x86: 'vcredist',
+  vcredist_2013_x64: 'vcredist',
+  vcredist_2013_x86: 'vcredist',
+  vcredist_2012_x64: 'vcredist',
+  vcredist_2012_x86: 'vcredist',
+  vcredist_2010_x64: 'vcredist',
+  vcredist_2010_x86: 'vcredist',
+  vcredist_2008_x64: 'vcredist',
+  vcredist_2008_x86: 'vcredist',
+  vcredist_2005_x64: 'vcredist',
+  vcredist_2005_x86: 'vcredist',
+  dotnet6: 'dotnet',
+  dotnet8: 'dotnet',
+  dotnet9: 'dotnet',
+  dotnet10: 'dotnet',
+  dotnet11: 'dotnet',
+  java8: 'java',
+  java25: 'java',
+  java11_jre: 'temurin',
+  java11_jdk: 'temurin',
+  java17_jre: 'temurin',
+  java17: 'temurin',
+  java21_jre: 'temurin',
+  java21: 'temurin'
+};
+
+function getAppIconSrc(app) {
+  if (!app || app.isOnlineSearch) return null;
+  const rawId = (app.id || '').toLowerCase().trim();
+  if (!rawId || rawId.startsWith('local_')) return null;
+  const iconKey = APP_ICON_ALIASES[rawId] || rawId;
+  return `icons/${encodeURIComponent(iconKey)}.png`;
+}
+
+function renderMiniAppIcon(app) {
+  const src = getAppIconSrc(app);
+  const catIcon = CATEGORY_ICONS[(app.category || '').toLowerCase()] || 'box';
+  if (!src) {
+    return `<span class="app-mini-icon fallback"><i data-lucide="${catIcon}" style="width:13px;height:13px;"></i></span>`;
+  }
+  return `<span class="app-mini-icon"><img src="${src}" alt="" loading="lazy" decoding="async" onerror="this.parentElement.classList.add('fallback'); this.remove();"><i data-lucide="${catIcon}" class="mini-fallback-svg" style="width:13px;height:13px;"></i></span>`;
+}
+
 const ESSENTIAL_PRESETS = {
   standard: ['Google Chrome', '7-Zip', 'Everything', 'VLC Media Player', 'SumatraPDF', 'Visual Studio Code', 'Git', 'Notepad++', 'DirectX Runtime', 'Visual C++ 2015-2022 x64'],
   gamer: ['Opera GX', 'Discord', 'OBS Studio', 'Steam', 'Epic Games Launcher', '7-Zip', 'Process Lasso', 'Windhawk', 'DirectX Runtime', 'Visual C++ 2015-2022 x64'],
@@ -502,14 +564,16 @@ function renderGalleryView(filtered) {
       ? `<button class="btn-quick-save" title="Guardar en tu catálogo" onclick="event.stopPropagation(); quickSaveOnline(decodeURIComponent('${encKey}'))">+</button>`
       : '';
     const desc = app.description || app.target || 'Aplicación de Windows';
+    const appIconSrc = getAppIconSrc(app);
+    const tileHtml = appIconSrc
+      ? `<div class="gallery-icon-tile has-app-logo"><img src="${appIconSrc}" alt="" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('has-app-logo'); this.parentElement.style.background='linear-gradient(135deg, ${c1}, ${c2})'; this.remove();"><i data-lucide="${iconName}" class="gallery-fallback-svg" style="width:24px;height:24px;"></i></div>`
+      : `<div class="gallery-icon-tile" style="background: linear-gradient(135deg, ${c1}, ${c2});"><i data-lucide="${iconName}" style="width:24px;height:24px;"></i></div>`;
 
     return `
       <article class="gallery-card ${isSel ? 'selected' : ''}" data-key="${escapeHtml(app.key)}" title="${tip}"
                onclick="toggleAppSelection(decodeURIComponent('${encKey}'), ${isOnline})" ${ctxAttr}>
         <div class="gallery-banner" style="background: linear-gradient(135deg, ${c1}26, ${c2}1c);">
-          <div class="gallery-icon-tile" style="background: linear-gradient(135deg, ${c1}, ${c2});">
-            <i data-lucide="${iconName}" style="width:24px;height:24px;"></i>
-          </div>
+          ${tileHtml}
           <div class="gallery-check-pos">
             ${saveBtn}
             <div class="custom-checkbox">${CHECK_SVG}</div>
@@ -617,6 +681,7 @@ function renderCardRow(app, isOnlineSearch) {
          onclick="toggleAppSelection(decodeURIComponent('${encodedKey}'), ${isOnlineSearch})" ${ctxAttr}>
       <div class="app-left">
         <div class="custom-checkbox">${CHECK_SVG}</div>
+        ${renderMiniAppIcon(app)}
         <span class="app-name">${escapeHtml(app.name)}</span>
       </div>
       <div class="app-right">
@@ -651,7 +716,7 @@ function renderTableView(filtered) {
         <td style="text-align:center;">
           <div class="custom-checkbox" style="margin:auto;">${CHECK_SVG}</div>
         </td>
-        <td><span class="table-app-name">${escapeHtml(app.name)}</span></td>
+        <td><div class="table-app-cell">${renderMiniAppIcon(app)}<span class="table-app-name">${escapeHtml(app.name)}</span></div></td>
         <td>
           <span class="table-cat-badge">
             <i data-lucide="${catIcon}" style="width:12px;height:12px;"></i>
