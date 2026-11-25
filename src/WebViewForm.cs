@@ -210,6 +210,18 @@ namespace Qinstall
                     case "saveProfiles":
                         HandleSaveProfiles(msg);
                         break;
+                    case "listDrives":
+                        HandleListDrives();
+                        break;
+                    case "pickExportFolder":
+                        HandlePickExportFolder();
+                        break;
+                    case "exportPortable":
+                        await HandleExportPortableAsync(msg);
+                        break;
+                    case "openFolder":
+                        OpenSpecificFolder(GetStr(msg, "path"));
+                        break;
                     case "setWindowTheme":
                         ApplyNativeTitlebarTheme(GetBool(msg, "dark"));
                         break;
@@ -972,6 +984,7 @@ namespace Qinstall
             long driveFree = 0;
             long driveTotal = 0;
             string driveName = string.Empty;
+            string driveTypeLabel = "Disco Duro";
             try
             {
                 string root = Path.GetPathRoot(AppCatalog.GetAppBaseDirectory());
@@ -983,6 +996,7 @@ namespace Qinstall
                         driveFree = di.AvailableFreeSpace;
                         driveTotal = di.TotalSize;
                         driveName = string.IsNullOrWhiteSpace(di.VolumeLabel) ? di.Name : (di.VolumeLabel + " (" + di.Name.TrimEnd('\\') + ")");
+                        driveTypeLabel = di.DriveType == DriveType.Removable ? "Pendrive USB" : "Disco Duro";
                     }
                 }
             }
@@ -993,8 +1007,285 @@ namespace Qinstall
                 { "cacheTotalBytes", cacheBytes },
                 { "driveFreeBytes", driveFree },
                 { "driveTotalBytes", driveTotal },
-                { "driveName", driveName }
+                { "driveName", driveName },
+                { "driveTypeLabel", driveTypeLabel }
             };
+        }
+
+        private void HandleListDrives()
+        {
+            List<object> list = new List<object>();
+            string currentRoot = string.Empty;
+            try { currentRoot = Path.GetPathRoot(AppCatalog.GetAppBaseDirectory()) ?? string.Empty; } catch { }
+
+            try
+            {
+                DriveInfo[] drives = DriveInfo.GetDrives();
+                for (int i = 0; i < drives.Length; i++)
+                {
+                    DriveInfo d = drives[i];
+                    if (!d.IsReady) continue;
+                    if (d.DriveType != DriveType.Removable && d.DriveType != DriveType.Fixed) continue;
+
+                    bool isCurrent = string.Equals(d.RootDirectory.FullName, currentRoot, StringComparison.OrdinalIgnoreCase);
+                    bool isUsb = d.DriveType == DriveType.Removable;
+                    string label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? (isUsb ? "Pendrive USB" : "Disco local / externo") : d.VolumeLabel;
+                    string defaultDest = Path.Combine(d.RootDirectory.FullName, "Qinstall");
+
+                    list.Add(new Dictionary<string, object>
+                    {
+                        { "root", d.RootDirectory.FullName },
+                        { "letter", d.Name.TrimEnd('\\') },
+                        { "label", label },
+                        { "isUsb", isUsb },
+                        { "isCurrent", isCurrent },
+                        { "freeBytes", d.AvailableFreeSpace },
+                        { "totalBytes", d.TotalSize },
+                        { "suggestedPath", defaultDest }
+                    });
+                }
+            }
+            catch { }
+
+            // Mostrar pendrives USB primero
+            list.Sort(delegate(object a, object b)
+            {
+                Dictionary<string, object> da = (Dictionary<string, object>)a;
+                Dictionary<string, object> db = (Dictionary<string, object>)b;
+                bool ua = (bool)da["isUsb"];
+                bool ub = (bool)db["isUsb"];
+                if (ua != ub) return ua ? -1 : 1;
+                return string.Compare((string)da["letter"], (string)db["letter"], StringComparison.OrdinalIgnoreCase);
+            });
+
+            PostMessage(new Dictionary<string, object>
+            {
+                { "type", "drivesList" },
+                { "drives", list },
+                { "currentBaseDir", AppCatalog.GetAppBaseDirectory() }
+            });
+        }
+
+        private void HandlePickExportFolder()
+        {
+            try
+            {
+                using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+                {
+                    fbd.Description = "Selecciona tu pendrive USB o disco externo para copiar qInstall portable";
+                    fbd.ShowNewFolderButton = true;
+                    if (fbd.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath))
+                    {
+                        string chosen = fbd.SelectedPath.Trim();
+                        // Si eligio la raiz de una unidad (ej. E:\), sugerir E:\Qinstall
+                        try
+                        {
+                            string root = Path.GetPathRoot(chosen);
+                            if (string.Equals(chosen.TrimEnd('\\') + "\\", root, StringComparison.OrdinalIgnoreCase))
+                            {
+                                chosen = Path.Combine(root, "Qinstall");
+                            }
+                        }
+                        catch { }
+
+                        PostMessage(new Dictionary<string, object>
+                        {
+                            { "type", "exportFolderPicked" },
+                            { "path", chosen }
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PostToast("No se pudo abrir el selector de carpeta: " + ex.Message, "warn");
+            }
+        }
+
+        private async Task HandleExportPortableAsync(Dictionary<string, object> msg)
+        {
+            if (_isBusy) return;
+            string destRaw = GetStr(msg, "destinationPath").Trim();
+            bool includeCache = GetBool(msg, "includeCache", true);
+            bool includeOffice = GetBool(msg, "includeOffice", true);
+
+            if (string.IsNullOrWhiteSpace(destRaw))
+            {
+                PostToast("Selecciona un pendrive o carpeta destino.", "warn");
+                return;
+            }
+
+            string srcDir;
+            string destDir;
+            try
+            {
+                srcDir = Path.GetFullPath(AppCatalog.GetAppBaseDirectory()).TrimEnd('\\');
+                destDir = Path.GetFullPath(destRaw).TrimEnd('\\');
+            }
+            catch (Exception ex)
+            {
+                PostToast("Ruta destino invalida: " + ex.Message, "warn");
+                return;
+            }
+
+            if (string.Equals(srcDir, destDir, StringComparison.OrdinalIgnoreCase) ||
+                destDir.StartsWith(srcDir + "\\", StringComparison.OrdinalIgnoreCase))
+            {
+                PostToast("El destino no puede ser la misma carpeta (ni subcarpeta) donde esta qInstall actualmente.", "warn");
+                return;
+            }
+
+            _isBusy = true;
+            int filesCopied = 0;
+            long bytesCopied = 0;
+            string errMsg = null;
+
+            try
+            {
+                PostProgress(true, "download", 10, "Preparando paquete portable para " + destDir + "...");
+                PostLog("--------------------------------------------------", "info");
+                PostLog("[*] Exportando qInstall portable hacia: " + destDir, "info");
+
+                await Task.Run(delegate
+                {
+                    Directory.CreateDirectory(destDir);
+
+                    // 1. Archivos principales
+                    string[] coreFiles = new[]
+                    {
+                        "Qinstall.exe",
+                        "apps.json",
+                        "profiles.json",
+                        "Microsoft.Web.WebView2.Core.dll",
+                        "Microsoft.Web.WebView2.WinForms.dll",
+                        "WebView2Loader.dll"
+                    };
+
+                    for (int i = 0; i < coreFiles.Length; i++)
+                    {
+                        string fName = coreFiles[i];
+                        string sPath = Path.Combine(srcDir, fName);
+                        if (!File.Exists(sPath) && fName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                        {
+                            sPath = Path.Combine(Path.Combine(Path.Combine(srcDir, "lib"), "webview2"), fName);
+                        }
+                        if (File.Exists(sPath))
+                        {
+                            string dPath = Path.Combine(destDir, fName);
+                            File.Copy(sPath, dPath, true);
+                            filesCopied++;
+                            bytesCopied += new FileInfo(dPath).Length;
+                        }
+                    }
+
+                    PostProgress(true, "download", 35, "Copiando interfaz e iconos offline (ui\\)...");
+                    string uiSrc = Path.Combine(srcDir, "ui");
+                    if (Directory.Exists(uiSrc))
+                    {
+                        CopyDirectoryRecursive(uiSrc, Path.Combine(destDir, "ui"), null, ref filesCopied, ref bytesCopied);
+                    }
+
+                    if (includeOffice)
+                    {
+                        PostProgress(true, "download", 60, "Copiando instalador de Office (office\\)...");
+                        string offSrc = Path.Combine(srcDir, "office");
+                        if (Directory.Exists(offSrc))
+                        {
+                            CopyDirectoryRecursive(offSrc, Path.Combine(destDir, "office"), null, ref filesCopied, ref bytesCopied);
+                        }
+                    }
+
+                    PostProgress(true, "download", 82, includeCache ? "Copiando instaladores locales y descargados (local\\)..." : "Copiando instaladores locales (sin cache)...");
+                    string locSrc = Path.Combine(srcDir, "local");
+                    if (Directory.Exists(locSrc))
+                    {
+                        string skipSub = includeCache ? null : Path.Combine(locSrc, "cache");
+                        CopyDirectoryRecursive(locSrc, Path.Combine(destDir, "local"), skipSub, ref filesCopied, ref bytesCopied);
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(Path.Combine(destDir, "local"));
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                errMsg = ex.Message;
+                PostLog("[X] Error exportando a pendrive/HDD: " + ex.Message, "warn");
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+
+            if (errMsg == null)
+            {
+                double mb = bytesCopied / (1024.0 * 1024.0);
+                string okText = string.Format("qInstall copiado listo para usar ({0} archivos, {1:0.1} MB) en {2}", filesCopied, mb, destDir);
+                PostProgress(false, "idle", 100, "Exportacion portable completada.");
+                PostLog("[OK] " + okText, "success");
+                PostMessage(new Dictionary<string, object>
+                {
+                    { "type", "exportDone" },
+                    { "success", true },
+                    { "path", destDir },
+                    { "filesCopied", filesCopied },
+                    { "totalBytes", bytesCopied },
+                    { "message", okText }
+                });
+            }
+            else
+            {
+                PostProgress(false, "idle", 0, "Error en la exportacion portable.");
+                PostMessage(new Dictionary<string, object>
+                {
+                    { "type", "exportDone" },
+                    { "success", false },
+                    { "path", destDir },
+                    { "message", errMsg }
+                });
+            }
+        }
+
+        private static void CopyDirectoryRecursive(string sourceDir, string destDir, string skipDirFullPath, ref int filesCopied, ref long bytesCopied)
+        {
+            if (!string.IsNullOrEmpty(skipDirFullPath))
+            {
+                string normSrc = Path.GetFullPath(sourceDir).TrimEnd('\\');
+                string normSkip = Path.GetFullPath(skipDirFullPath).TrimEnd('\\');
+                if (string.Equals(normSrc, normSkip, StringComparison.OrdinalIgnoreCase)) return;
+            }
+
+            Directory.CreateDirectory(destDir);
+            string[] files = Directory.GetFiles(sourceDir);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string dstFile = Path.Combine(destDir, Path.GetFileName(files[i]));
+                File.Copy(files[i], dstFile, true);
+                filesCopied++;
+                try { bytesCopied += new FileInfo(dstFile).Length; } catch { }
+            }
+
+            string[] subDirs = Directory.GetDirectories(sourceDir);
+            for (int i = 0; i < subDirs.Length; i++)
+            {
+                CopyDirectoryRecursive(subDirs[i], Path.Combine(destDir, Path.GetFileName(subDirs[i])), skipDirFullPath, ref filesCopied, ref bytesCopied);
+            }
+        }
+
+        private void OpenSpecificFolder(string path)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                {
+                    Process.Start("explorer.exe", "\"" + path + "\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                PostToast("No se pudo abrir la carpeta: " + ex.Message, "warn");
+            }
         }
 
         private void OpenLocalFolder()

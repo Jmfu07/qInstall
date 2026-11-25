@@ -172,6 +172,11 @@
           <span>Instalar Winget</span>
         </button>
 
+        <button class="btn-header" onclick="openPortableExportModal()" title="Copiar qInstall listo para usar a un pendrive USB o disco duro externo">
+          <i data-lucide="hard-drive" style="width: 14px; height: 14px; color: var(--cyan-accent);"></i>
+          <span>Pendrive / HDD</span>
+        </button>
+
         <button class="btn-header" onclick="toggleSettingsModal()" title="Ajustes de qInstall">
           <i data-lucide="settings" style="width: 14px; height: 14px;"></i>
           <span>Ajustes</span>
@@ -462,6 +467,7 @@
           <div class="settings-actions-row">
             <button class="btn-tool" onclick="postToHost({ action: 'openLocalFolder' })"><i data-lucide="folder-open" style="width: 14px;"></i> Abrir carpeta local\</button>
             <button class="btn-tool" onclick="requestAddLocalInstaller(); toggleSettingsModal();"><i data-lucide="folder-plus" style="width: 14px;"></i> Agregar instalador</button>
+            <button class="btn-tool" onclick="toggleSettingsModal(); openPortableExportModal();"><i data-lucide="hard-drive" style="width: 14px;"></i> Copiar a Pendrive / HDD</button>
           </div>
         </div>
 
@@ -481,6 +487,60 @@
       <div class="modal-footer">
         <button class="btn-header" onclick="toggleSettingsModal()">Cerrar</button>
         <button class="btn-tool" style="background: var(--primary); color:#fff; border-color: var(--primary);" onclick="saveSettings()"><i data-lucide="check" style="width: 14px;"></i> Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EXPORTAR PORTABLE A PENDRIVE / DISCO EXTERNO -->
+  <div class="modal-backdrop" id="exportBackdrop" onclick="if(event.target===this) closePortableExportModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="hard-drive" style="width: 17px; height: 17px; color: var(--cyan-accent);"></i>
+          <span>Copiar qInstall a Pendrive USB o Disco Externo</span>
+        </div>
+        <button class="modal-close" onclick="closePortableExportModal()"><i data-lucide="x" style="width: 16px;"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-desc">
+          qInstall es <b>100% portable</b>. Selecciona tu pendrive USB o disco duro externo para copiar una versión limpia lista para usar en cualquier PC (sin archivos de desarrollo):
+        </div>
+
+        <div class="settings-group">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div class="settings-group-title">Unidades Detectadas</div>
+            <button class="btn-tool" style="height:26px; font-size:11px; padding:0 8px;" onclick="postToHost({ action: 'listDrives' })">
+              <i data-lucide="refresh-cw" style="width:12px;height:12px;"></i> Re-escanear
+            </button>
+          </div>
+          <div class="drive-list" id="exportDrivesList">
+            <div style="font-size:12px; color:var(--text-muted); padding:8px;">Buscando pendrives y discos conectados...</div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Carpeta Destino en la Unidad</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" id="exportDestInput" placeholder="Ej. E:\Qinstall" style="flex:1; height:34px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border-medium); background:var(--bg-surface-1); color:var(--text-primary); font-family:'Cascadia Code', monospace; font-size:12px;">
+            <button class="btn-tool" style="height:34px;" onclick="postToHost({ action: 'pickExportFolder' })">
+              <i data-lucide="folder-open" style="width:14px;height:14px;"></i> Examinar...
+            </button>
+          </div>
+          <label class="checkbox-label" style="margin-top:4px;">
+            <input type="checkbox" id="exportIncludeCache" checked>
+            <span>Incluir instaladores descargados offline (<code>local\cache\</code>)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="exportIncludeOffice" checked>
+            <span>Incluir instalador y plantillas de Office (<code>office\</code>)</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-header" onclick="closePortableExportModal()">Cancelar</button>
+        <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="startPortableExport()">
+          <i data-lucide="hard-drive-download" style="width:15px;height:15px;"></i> Copiar a unidad ahora
+        </button>
       </div>
     </div>
   </div>

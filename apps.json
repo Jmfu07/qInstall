@@ -402,6 +402,36 @@
       "Essential": false
     },
     {
+      "Id": "nvcleanstall",
+      "Name": "NVCleanstall (Drivers NVIDIA)",
+      "Category": "Soporte y Drivers",
+      "Description": "Descarga e instala drivers oficiales NVIDIA Game Ready / Studio limpios sin bloatware",
+      "Source": "winget",
+      "Target": "TechPowerUp.NVCleanstall",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "nvidia_app",
+      "Name": "NVIDIA App (Drivers GeForce)",
+      "Category": "Soporte y Drivers",
+      "Description": "Aplicacion oficial de NVIDIA para gestionar y actualizar drivers GeForce",
+      "Source": "url",
+      "Target": "https://us.download.nvidia.com/nvapp/client/11.0.3.218/NVIDIA_app_v11.0.3.218.exe",
+      "SilentArgs": "-s -noreboot",
+      "Essential": false
+    },
+    {
+      "Id": "nvidia_physx",
+      "Name": "NVIDIA PhysX System Software",
+      "Category": "Soporte y Drivers",
+      "Description": "Driver y motor fisico oficial NVIDIA PhysX para juegos",
+      "Source": "winget",
+      "Target": "Nvidia.PhysX",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "msi_afterburner",
       "Name": "MSI Afterburner",
       "Category": "Soporte y Drivers",

@@ -261,6 +261,20 @@ if (window.chrome && window.chrome.webview) {
       case 'offlinePrompt':
         showOfflinePromptModal(msg.needsInternet || [], msg.offlineCount || 0);
         break;
+      case 'drivesList':
+        renderExportDrivesList(msg.drives || []);
+        break;
+      case 'exportFolderPicked':
+        if (msg.path) {
+          state.exportTargetPath = msg.path;
+          const inp = document.getElementById('exportDestInput');
+          if (inp) inp.value = msg.path;
+          document.querySelectorAll('.drive-card').forEach(el => el.classList.remove('selected'));
+        }
+        break;
+      case 'exportDone':
+        handleExportDone(msg);
+        break;
       case 'summary':
         setBusyState(false, 'idle');
         showSummaryModal(msg.title, msg.headline, msg.items || [], !!msg.hasFailures);
@@ -1163,7 +1177,9 @@ function updateStorageSettingsView() {
   const used = Math.max(0, total - free);
   const usedPct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
 
-  drvEl.textContent = st.driveName ? `Unidad: ${st.driveName}` : 'Unidad local';
+  drvEl.textContent = st.driveName
+    ? `${st.driveTypeLabel || 'Unidad'}: ${st.driveName}`
+    : 'Unidad local';
   cacheEl.textContent = `Instaladores descargados: ${formatBytes(st.cacheTotalBytes || 0)}`;
   freeEl.textContent = total > 0 ? `Libre: ${formatBytes(free)} de ${formatBytes(total)} (${usedPct}% usado)` : 'Espacio no disponible';
   if (fillEl) fillEl.style.width = usedPct + '%';
@@ -1422,6 +1438,110 @@ function openDialogModal(title, bodyHtml, footerHtml) {
   refreshIcons();
 }
 
+function openPortableExportModal() {
+  if (state.isBusy) {
+    showToast('Espera a que termine la operación actual antes de exportar.', 'warn');
+    return;
+  }
+  const modal = document.getElementById('exportBackdrop');
+  if (!modal) return;
+  modal.classList.add('show');
+  postToHost({ action: 'listDrives' });
+  refreshIcons();
+}
+
+function closePortableExportModal() {
+  const modal = document.getElementById('exportBackdrop');
+  if (modal) modal.classList.remove('show');
+}
+
+function renderExportDrivesList(drives) {
+  const listEl = document.getElementById('exportDrivesList');
+  const inp = document.getElementById('exportDestInput');
+  if (!listEl) return;
+
+  if (!drives || drives.length === 0) {
+    listEl.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:8px;">No se detectaron unidades listas. Conecta tu pendrive o disco externo y pulsa <b>Re-escanear</b>, o usa <b>Examinar...</b></div>';
+    return;
+  }
+
+  let autoSelected = '';
+  const firstUsb = drives.find(d => d.isUsb && !d.isCurrent) || drives.find(d => !d.isCurrent);
+  if (firstUsb && (!inp.value || !inp.value.trim())) {
+    autoSelected = firstUsb.suggestedPath;
+    inp.value = autoSelected;
+  } else if (inp && inp.value) {
+    autoSelected = inp.value;
+  }
+
+  listEl.innerHTML = drives.map(d => {
+    const encPath = encodeJsArg(d.suggestedPath);
+    const isSel = autoSelected && autoSelected.toLowerCase() === String(d.suggestedPath || '').toLowerCase();
+    const iconName = d.isUsb ? 'usb' : 'hard-drive';
+    const badgeCls = d.isUsb ? 'usb' : 'hdd';
+    const badgeText = d.isUsb ? 'PENDRIVE USB' : 'DISCO DURO';
+    const currentNote = d.isCurrent ? ' · Unidad actual' : '';
+    return `
+      <div class="drive-card ${isSel ? 'selected' : ''}" data-path="${escapeHtml(d.suggestedPath)}"
+           onclick="selectExportDrive(this, decodeURIComponent('${encPath}'))">
+        <div class="drive-card-left">
+          <div class="drive-icon-box ${badgeCls}"><i data-lucide="${iconName}" style="width:17px;height:17px;"></i></div>
+          <div>
+            <div class="drive-name">${escapeHtml(d.label)} (${escapeHtml(d.letter)})${currentNote}</div>
+            <div class="drive-sub">Libre: ${formatBytes(d.freeBytes)} de ${formatBytes(d.totalBytes)} → ${escapeHtml(d.suggestedPath)}</div>
+          </div>
+        </div>
+        <span class="drive-badge ${badgeCls}">${badgeText}</span>
+      </div>`;
+  }).join('');
+  refreshIcons();
+}
+
+function selectExportDrive(el, suggestedPath) {
+  document.querySelectorAll('.drive-card').forEach(c => c.classList.remove('selected'));
+  if (el) el.classList.add('selected');
+  const inp = document.getElementById('exportDestInput');
+  if (inp) inp.value = suggestedPath;
+}
+
+function startPortableExport() {
+  if (state.isBusy) return;
+  const inp = document.getElementById('exportDestInput');
+  const dest = inp ? inp.value.trim() : '';
+  if (!dest) {
+    showToast('Selecciona un pendrive, disco externo o carpeta destino.', 'warn');
+    return;
+  }
+  const includeCache = document.getElementById('exportIncludeCache').checked;
+  const includeOffice = document.getElementById('exportIncludeOffice').checked;
+  closePortableExportModal();
+  postToHost({
+    action: 'exportPortable',
+    destinationPath: dest,
+    includeCache,
+    includeOffice
+  });
+}
+
+function handleExportDone(msg) {
+  if (msg.success) {
+    const encPath = encodeJsArg(msg.path || '');
+    openDialogModal(
+      'qInstall copiado a la unidad',
+      `<p style="font-size:13px; color:var(--text-secondary);"><b>¡Listo para llevar!</b> Se copió la versión portable limpia en:<br><code style="font-family:'Cascadia Code', monospace; color:var(--primary);">${escapeHtml(msg.path)}</code></p><div class="dialog-list"><div class="dialog-row-ok">• Archivos copiados: ${msg.filesCopied || 0} (${formatBytes(msg.totalBytes || 0)})</div><div class="dialog-row-ok">• Incluye: Qinstall.exe, WebView2 DLLs, catálogo, perfiles, íconos offline y carpetas seleccionadas</div></div>`,
+      `<button class="btn-header" onclick="closeDialogModal()">Cerrar</button>
+       <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'openFolder', path: decodeURIComponent('${encPath}') })">Abrir carpeta</button>`
+    );
+    showToast('qInstall copiado correctamente a la unidad.', 'success');
+  } else {
+    openDialogModal(
+      'No se pudo copiar a la unidad',
+      `<p style="font-size:13px; color:var(--status-nonet-text);">${escapeHtml(msg.message || 'Error desconocido al copiar archivos.')}</p>`,
+      `<button class="btn-header" onclick="closeDialogModal()">Entendido</button>`
+    );
+  }
+}
+
 function closeDialogModal() {
   document.getElementById('dialogBackdrop').classList.remove('show');
 }
@@ -1492,6 +1612,7 @@ document.addEventListener('keydown', (e) => {
     searchInput.select();
   } else if (e.key === 'Escape') {
     document.getElementById('settingsBackdrop').classList.remove('show');
+    document.getElementById('exportBackdrop').classList.remove('show');
     document.getElementById('dialogBackdrop').classList.remove('show');
     document.getElementById('themeMenu').classList.remove('show');
     document.getElementById('essentialsMenu').classList.remove('show');
