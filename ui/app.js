@@ -336,14 +336,12 @@ function startSmoothLoader(waitForBackend) {
   const bar = document.getElementById('loaderBar');
   const runner = document.getElementById('loaderNyanRunner');
   const span = document.getElementById('loaderStatusSpan');
-  const dots = [0, 1, 2, 3].map(i => document.getElementById('dot' + i));
 
   if (ov) ov.classList.remove('hidden');
   loaderState.running = true;
   loaderState.startTime = performance.now();
   if (!waitForBackend) loaderState.backendReady = true;
 
-  let lastDot = -1;
   let lastShownText = '';
 
   function tick(now) {
@@ -360,12 +358,6 @@ function startSmoothLoader(waitForBackend) {
     }
 
     applyNyanBarPosition(bar, runner, pct);
-
-    const dotIdx = pct < 25 ? 0 : (pct < 55 ? 1 : (pct < 85 ? 2 : 3));
-    if (dotIdx !== lastDot) {
-      lastDot = dotIdx;
-      dots.forEach((d, idx) => d && d.classList.toggle('active', idx <= dotIdx));
-    }
 
     let stepText;
     if (pct < 25) {

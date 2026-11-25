@@ -244,16 +244,6 @@ body {
 }
 [data-theme="light"] .loader-status-text { color: #334155; }
 
-.loader-steps { margin-top: 18px; display: flex; gap: 8px; }
-.loader-step-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--text-muted); opacity: 0.35; transition: all 0.25s ease;
-}
-.loader-step-dot.active {
-  background: var(--cyan-accent); opacity: 1;
-  transform: scale(1.3); box-shadow: 0 0 8px var(--cyan-accent);
-}
-
 /* ==========================================================================
    VENTANA PRINCIPAL & HEADER
    ========================================================================== */
