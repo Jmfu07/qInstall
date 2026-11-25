@@ -6,6 +6,7 @@ using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -31,7 +32,7 @@ namespace Qinstall
         private readonly Dictionary<string, OfflineCacheUpdateInfo> _outdatedCaches = new Dictionary<string, OfflineCacheUpdateInfo>(StringComparer.OrdinalIgnoreCase);
         private bool _hasInternet = true;
         private string _networkLabel = string.Empty;
-        private Timer _netDebounceTimer;
+        private System.Windows.Forms.Timer _netDebounceTimer;
         private bool _netEventsWired;
         private bool _wingetAvailable;
         private string _wingetVersion = string.Empty;
@@ -62,7 +63,7 @@ namespace Qinstall
             this.Load += WebViewForm_Load;
             this.FormClosing += WebViewForm_FormClosing;
 
-            _netDebounceTimer = new Timer();
+            _netDebounceTimer = new System.Windows.Forms.Timer();
             _netDebounceTimer.Interval = 1800;
             _netDebounceTimer.Tick += NetDebounceTimer_Tick;
         }
@@ -1028,27 +1029,50 @@ namespace Qinstall
             _isBusy = true;
             _engine.ResetCancellation();
             List<InstallResult> results = new List<InstallResult>();
+            object resLock = new object();
+            int completed = 0;
+            int total = downloadable.Count;
+
             try
             {
-                for (int i = 0; i < downloadable.Count; i++)
+                PostProgress(true, "download", 2, string.Format("Descarga turbo en paralelo (0/{0})...", total));
+                using (SemaphoreSlim sem = new SemaphoreSlim(3, 3))
                 {
-                    AppItem app = downloadable[i];
-                    int pct = (int)Math.Round(((double)i / downloadable.Count) * 100.0);
-                    PostProgress(true, "download", pct, string.Format("Descargando offline ({0}/{1}): {2}...", i + 1, downloadable.Count, app.Name));
-
-                    InstallResult res = await _engine.DownloadForOfflineAsync(app);
-                    results.Add(res);
-
-                    if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                    List<Task> tasks = new List<Task>();
+                    for (int i = 0; i < total; i++)
                     {
-                        string key = GetAppKey(app);
-                        _outdatedCaches.Remove(key);
-                        PostAppUpdated(app, _installedKeys.Contains(key), true, false, true);
-                    }
+                        AppItem app = downloadable[i];
+                        tasks.Add(Task.Run(async delegate
+                        {
+                            await sem.WaitAsync();
+                            try
+                            {
+                                InstallResult res = await _engine.DownloadForOfflineAsync(app);
+                                int nowDone;
+                                lock (resLock)
+                                {
+                                    results.Add(res);
+                                    completed++;
+                                    nowDone = completed;
+                                }
 
-                    if (res.Status == InstallStatus.Cancelled) break;
-                    int donePct = (int)Math.Round(((double)(i + 1) / downloadable.Count) * 100.0);
-                    PostProgress(true, "download", donePct, string.Format("Guardado offline ({0}/{1}): {2}", i + 1, downloadable.Count, app.Name));
+                                if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                                {
+                                    string key = GetAppKey(app);
+                                    _outdatedCaches.Remove(key);
+                                    PostAppUpdated(app, _installedKeys.Contains(key), true, false, true);
+                                }
+
+                                int donePct = (int)Math.Round(((double)nowDone / total) * 100.0);
+                                PostProgress(true, "download", donePct, string.Format("Descargadas ({0}/{1}): {2}", nowDone, total, app.Name));
+                            }
+                            finally
+                            {
+                                sem.Release();
+                            }
+                        }));
+                    }
+                    await Task.WhenAll(tasks.ToArray());
                 }
             }
             finally

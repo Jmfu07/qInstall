@@ -23,8 +23,10 @@ namespace Qinstall
             {
             }
 
-            // Habilitar TLS 1.2 para descargas HTTPS modernas en .NET Framework 4.8
+            // Habilitar TLS 1.2 y conexiones paralelas rapidas para descargas HTTPS modernas en .NET Framework 4.8
             ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+            ServicePointManager.DefaultConnectionLimit = 32;
+            ServicePointManager.Expect100Continue = false;
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
