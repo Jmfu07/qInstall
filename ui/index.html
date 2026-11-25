@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>qInstall — Gestor de Software por Lotes</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="lucide.min.js"></script>
+</head>
+<body>
+  <div class="ambient-glow"></div>
+
+  <!-- PANTALLA DE CARGA CON NYAN CAT -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loader-container">
+      <div class="loader-logo-wrap">
+        <div class="loader-ring"></div>
+        <div class="loader-glow-core">
+          <svg class="ibm-logo-svg loader-ibm-svg" viewBox="0 0 96 82" xmlns="http://www.w3.org/2000/svg">
+            <rect x="18" y="4" width="48" height="6" rx="1.5" />
+            <rect x="12" y="14" width="14" height="6" rx="1" />
+            <rect x="58" y="14" width="14" height="6" rx="1" />
+            <rect x="9" y="24" width="14" height="6" rx="1" />
+            <rect x="61" y="24" width="14" height="6" rx="1" />
+            <rect x="9" y="34" width="14" height="6" rx="1" />
+            <rect x="61" y="34" width="14" height="6" rx="1" />
+            <rect x="9" y="44" width="14" height="6" rx="1" />
+            <rect x="44" y="44" width="12" height="6" rx="1" />
+            <rect x="61" y="44" width="14" height="6" rx="1" />
+            <rect x="12" y="54" width="14" height="6" rx="1" />
+            <rect x="50" y="54" width="28" height="6" rx="1" />
+            <rect x="18" y="64" width="46" height="6" rx="1.5" />
+            <rect x="68" y="64" width="18" height="6" rx="1" />
+            <rect x="76" y="74" width="16" height="5" rx="1" />
+          </svg>
+        </div>
+      </div>
+
+      <h2 class="loader-title">qInstall</h2>
+      <p class="loader-subtitle">Iniciando entorno y comprobando paquetes del sistema...</p>
+
+      <div class="nyan-progress-track" style="margin-bottom: 16px; max-width: 380px;">
+        <div class="nyan-rainbow-fill" id="loaderBar" style="width: 0%;"></div>
+        <div class="nyan-cat-runner" id="loaderNyanRunner" style="left: 0%;">
+          <svg class="nyan-cat-sprite" viewBox="0 0 34 22" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="10" width="4" height="3" fill="#999" />
+            <rect x="2" y="8" width="3" height="3" fill="#999" />
+            <rect x="5" y="3" width="18" height="16" rx="2" fill="#fcd1a6" stroke="#000" stroke-width="1" />
+            <rect x="7" y="5" width="14" height="12" fill="#ff99bb" />
+            <rect x="9" y="7" width="1.5" height="1.5" fill="#cc0066" />
+            <rect x="15" y="7" width="1.5" height="1.5" fill="#cc0066" />
+            <rect x="11" y="11" width="1.5" height="1.5" fill="#cc0066" />
+            <rect x="17" y="12" width="1.5" height="1.5" fill="#cc0066" />
+            <rect x="13" y="14" width="1.5" height="1.5" fill="#cc0066" />
+            <rect x="7" y="18" width="3" height="3" fill="#999" stroke="#000" stroke-width="0.8" />
+            <rect x="18" y="18" width="3" height="3" fill="#999" stroke="#000" stroke-width="0.8" />
+            <rect x="20" y="5" width="12" height="11" rx="2" fill="#999" stroke="#000" stroke-width="1" />
+            <polygon points="20,5 23,1 25,5" fill="#999" stroke="#000" stroke-width="0.8" />
+            <polygon points="27,5 29,1 32,5" fill="#999" stroke="#000" stroke-width="0.8" />
+            <rect x="23" y="8" width="2" height="2" fill="#000" />
+            <rect x="28" y="8" width="2" height="2" fill="#000" />
+            <rect x="23" y="8" width="0.8" height="0.8" fill="#fff" />
+            <rect x="28" y="8" width="0.8" height="0.8" fill="#fff" />
+            <rect x="21" y="11" width="2.5" height="2" fill="#ff99bb" />
+            <rect x="29.5" y="11" width="2.5" height="2" fill="#ff99bb" />
+            <rect x="26" y="10" width="1.5" height="1" fill="#000" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="loader-status-text" id="loaderStatus">
+        <i data-lucide="terminal" style="width: 14px; height: 14px;"></i>
+        <span id="loaderStatusSpan">Iniciando qInstall...</span>
+      </div>
+
+      <div class="loader-steps">
+        <div class="loader-step-dot active" id="dot0"></div>
+        <div class="loader-step-dot" id="dot1"></div>
+        <div class="loader-step-dot" id="dot2"></div>
+        <div class="loader-step-dot" id="dot3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VENTANA PRINCIPAL -->
+  <div class="app-window">
+    <header class="header">
+      <div class="brand-section">
+        <div class="ibm-brand-box" title="qInstall">
+          <svg class="ibm-logo-svg" viewBox="0 0 96 82" xmlns="http://www.w3.org/2000/svg">
+            <rect x="18" y="4" width="48" height="6" rx="1.5" />
+            <rect x="12" y="14" width="14" height="6" rx="1" />
+            <rect x="58" y="14" width="14" height="6" rx="1" />
+            <rect x="9" y="24" width="14" height="6" rx="1" />
+            <rect x="61" y="24" width="14" height="6" rx="1" />
+            <rect x="9" y="34" width="14" height="6" rx="1" />
+            <rect x="61" y="34" width="14" height="6" rx="1" />
+            <rect x="9" y="44" width="14" height="6" rx="1" />
+            <rect x="44" y="44" width="12" height="6" rx="1" />
+            <rect x="61" y="44" width="14" height="6" rx="1" />
+            <rect x="12" y="54" width="14" height="6" rx="1" />
+            <rect x="50" y="54" width="28" height="6" rx="1" />
+            <rect x="18" y="64" width="46" height="6" rx="1.5" />
+            <rect x="68" y="64" width="18" height="6" rx="1" />
+            <rect x="76" y="74" width="16" height="5" rx="1" />
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1>
+            <span class="brand-name-ibm">qInstall</span>
+            <span class="brand-badge-ai"><i data-lucide="sparkles" style="width: 11px; height: 11px;"></i> Powered by IA</span>
+          </h1>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Selector de Tema -->
+        <div class="theme-dropdown-wrap" id="themeDropdownWrap">
+          <button class="btn-header" id="themeToggleBtn" onclick="toggleThemeMenu()" title="Modo de apariencia">
+            <i data-lucide="moon" id="currentThemeIcon" style="width: 14px; height: 14px; color: #60a5fa;"></i>
+            <span id="currentThemeLabel">Oscuro</span>
+            <i data-lucide="chevron-down" style="width: 12px; height: 12px; opacity: 0.65;"></i>
+          </button>
+          <div class="theme-menu" id="themeMenu">
+            <div class="theme-menu-header">Modo de Apariencia</div>
+            <button class="theme-option active" data-theme-val="dark" onclick="selectTheme('dark')">
+              <div class="theme-option-left">
+                <i data-lucide="moon" style="width: 16px; height: 16px; color: #60a5fa;"></i>
+                <div class="theme-option-text">
+                  <span class="theme-option-title">Modo Oscuro</span>
+                  <span class="theme-option-desc">Obsidian Charcoal de alto contraste</span>
+                </div>
+              </div>
+              <i data-lucide="check" class="theme-check" style="width: 14px; height: 14px;"></i>
+            </button>
+            <button class="theme-option" data-theme-val="light" onclick="selectTheme('light')">
+              <div class="theme-option-left">
+                <i data-lucide="sun" style="width: 16px; height: 16px; color: #f59e0b;"></i>
+                <div class="theme-option-text">
+                  <span class="theme-option-title">Modo Claro Gris</span>
+                  <span class="theme-option-desc">Tono gris claro descansado</span>
+                </div>
+              </div>
+              <i data-lucide="check" class="theme-check" style="width: 14px; height: 14px;"></i>
+            </button>
+            <button class="theme-option" data-theme-val="system" onclick="selectTheme('system')">
+              <div class="theme-option-left">
+                <i data-lucide="laptop" style="width: 16px; height: 16px; color: #10b981;"></i>
+                <div class="theme-option-text">
+                  <span class="theme-option-title">Sistema (Automático)</span>
+                  <span class="theme-option-desc">Sincronizar con Windows</span>
+                </div>
+              </div>
+              <i data-lucide="check" class="theme-check" style="width: 14px; height: 14px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Estado de Red -->
+        <div class="env-badge" id="netBadge" title="Estado de conexión a Internet">
+          <span class="dot"></span>
+          <span id="netBadgeText">Red...</span>
+        </div>
+
+        <!-- Estado Winget -->
+        <div class="env-badge" id="wingetBadge" title="Gestor de paquetes Winget">
+          <span class="dot"></span>
+          <span id="wingetBadgeText">Winget...</span>
+        </div>
+
+        <button class="btn-header warn-cta" id="btnInstallWinget" style="display: none;" onclick="requestInstallWinget()">
+          <i data-lucide="download" style="width: 14px; height: 14px;"></i>
+          <span>Instalar Winget</span>
+        </button>
+
+        <button class="btn-header" id="btnAdmin" onclick="requestRunAsAdmin()" title="Elevación de privilegios UAC">
+          <i data-lucide="shield-check" style="width: 14px; height: 14px; color: #f59e0b;"></i>
+          <span id="btnAdminText">Ejecutar como Admin</span>
+        </button>
+
+        <button class="btn-header" onclick="toggleSettingsModal()" title="Ajustes de qInstall">
+          <i data-lucide="settings" style="width: 14px; height: 14px;"></i>
+          <span>Ajustes</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Filtrar catálogo o buscar online en Winget...">
+        <span class="search-key-hint" title="Presiona '/' para buscar">/</span>
+      </div>
+
+      <div class="toolbar-filters">
+        <div class="essentials-dropdown-wrap" id="essentialsWrap">
+          <div class="essentials-split-btn">
+            <button class="btn-chip btn-essentials-main" id="filterEssentials" onclick="toggleEssentials()" title="Alternar selección de esenciales">
+              <i data-lucide="sparkles" style="width: 14px; height: 14px;"></i>
+              <span>Esenciales</span>
+            </button>
+            <button class="btn-essentials-arrow" onclick="toggleEssentialsMenu(event)" title="Perfiles y configuración de esenciales">
+              <i data-lucide="chevron-down" style="width: 12px; height: 12px;"></i>
+            </button>
+          </div>
+
+          <div class="essentials-menu" id="essentialsMenu">
+            <div class="essentials-menu-header">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <i data-lucide="sliders" style="width: 13px; height: 13px; color: var(--primary);"></i>
+                <span>Configurar Esenciales</span>
+              </div>
+              <span class="essentials-preset-badge" id="currentPresetBadge">Estándar</span>
+            </div>
+
+            <div class="essentials-section-label">Perfiles Predefinidos</div>
+            <div class="essentials-presets-row">
+              <button class="btn-preset" data-preset="standard" onclick="applyEssentialPreset('standard')"><i data-lucide="sparkles" style="width: 11px; height: 11px;"></i> Estándar</button>
+              <button class="btn-preset" data-preset="gamer" onclick="applyEssentialPreset('gamer')"><i data-lucide="gamepad-2" style="width: 11px; height: 11px;"></i> Gamer</button>
+              <button class="btn-preset" data-preset="dev" onclick="applyEssentialPreset('dev')"><i data-lucide="code-2" style="width: 11px; height: 11px;"></i> Dev</button>
+              <button class="btn-preset" data-preset="tech" onclick="applyEssentialPreset('tech')"><i data-lucide="wrench" style="width: 11px; height: 11px;"></i> Técnico</button>
+              <button class="btn-preset" data-preset="office" onclick="applyEssentialPreset('office')"><i data-lucide="briefcase" style="width: 11px; height: 11px;"></i> Oficina</button>
+            </div>
+
+            <div class="essentials-section-label" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>Selección de Apps</span>
+              <span id="essentialsCountLabel" style="color:var(--primary); font-family:'Cascadia Code', monospace; font-size:10px;">0 apps</span>
+            </div>
+
+            <div class="essentials-app-picker" id="essentialsPicker"></div>
+
+            <div class="essentials-menu-footer">
+              <button class="btn-tool" style="height: 28px; font-size: 11px;" onclick="resetEssentialsToDefault()">Restablecer</button>
+              <button class="btn-tool" style="height: 28px; font-size: 11px; background: var(--primary); color:#fff; border-color: var(--primary);" onclick="saveCustomEssentials()">Guardar &amp; Aplicar</button>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-chip" id="filterAll" onclick="toggleAll()" title="Alternar selección de todas las visibles">
+          <i data-lucide="check-square" style="width: 14px; height: 14px;"></i>
+          <span>Todo</span>
+        </button>
+
+        <button class="btn-chip" onclick="clearSelection()" title="Limpiar selección">
+          <i data-lucide="x-circle" style="width: 14px; height: 14px;"></i>
+          <span>Limpiar</span>
+        </button>
+      </div>
+
+      <div class="view-switcher" title="Cambiar vista">
+        <button class="btn-view active" id="viewBtnCards" onclick="switchView('cards')">
+          <i data-lucide="layout-grid" style="width: 13px; height: 13px;"></i>
+          <span>Cuadrícula</span>
+        </button>
+        <button class="btn-view" id="viewBtnTable" onclick="switchView('table')">
+          <i data-lucide="table-2" style="width: 13px; height: 13px;"></i>
+          <span>Tabla Densa</span>
+        </button>
+      </div>
+
+      <div class="toolbar-tools">
+        <button class="btn-tool local-tool" onclick="requestAddLocalInstaller()" title="Agregar un .exe o .msi local para usar sin Internet">
+          <i data-lucide="folder-plus" style="width: 14px; height: 14px;"></i>
+          <span>+ Instalador local</span>
+        </button>
+        <button class="btn-tool icon-only" onclick="requestRefresh()" title="Re-escanear red, carpeta local\ y apps instaladas">
+          <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- VISTA CUADRÍCULA -->
+    <main class="app-content" id="appGrid"></main>
+
+    <!-- VISTA TABLA DENSA -->
+    <div class="app-table-container" id="appTableContainer">
+      <div class="dense-table-wrapper">
+        <table class="dense-table">
+          <thead>
+            <tr>
+              <th style="width: 38px; text-align:center;">
+                <input type="checkbox" id="tableHeaderCheck" onchange="toggleAllFromHeader(this)" style="accent-color: var(--primary); cursor: pointer;">
+              </th>
+              <th>Aplicación</th>
+              <th>Categoría</th>
+              <th>Caché / Local</th>
+              <th>Origen</th>
+              <th>Estado</th>
+              <th style="text-align: right;">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="denseTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- FOOTER + NYAN CAT PROGRESS BAR -->
+    <footer class="footer">
+      <div class="footer-top">
+        <div class="footer-left">
+          <div class="selection-counter">
+            <span class="counter-badge" id="selectedCount">0</span>
+            <span>Aplicaciones seleccionadas</span>
+          </div>
+
+          <div class="footer-checkboxes">
+            <label class="checkbox-label">
+              <input type="checkbox" id="chkSilent" checked>
+              <span>Instalación silenciosa</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="chkUpgrade" checked>
+              <span>Actualizar si ya existe</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="footer-right">
+          <button class="btn-console" onclick="toggleConsole()">
+            <i data-lucide="terminal-square" style="width: 15px; height: 15px;"></i>
+            <span>Ver Registro</span>
+          </button>
+
+          <button class="btn-offline-dl" id="btnDownloadOffline" onclick="startOfflineDownload()">
+            <i data-lucide="hard-drive-download" style="width: 16px; height: 16px;"></i>
+            <span>Descargar offline</span>
+          </button>
+
+          <button class="btn-install" id="btnInstall" onclick="startOrCancelInstall()">
+            <i data-lucide="download-cloud" style="width: 17px; height: 17px;"></i>
+            <span id="btnInstallLabel">Instalar seleccionadas</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="nyan-progress-section">
+        <div class="nyan-info-row">
+          <div class="status-text" id="statusMessage">
+            <i data-lucide="check-circle" style="width: 14px; height: 14px; color: var(--cta-green); flex-shrink: 0;"></i>
+            <span id="statusMessageText">Cargando entorno...</span>
+          </div>
+          <div class="nyan-pct-text" id="statusPct">0%</div>
+        </div>
+
+        <div class="nyan-progress-track">
+          <div class="nyan-rainbow-fill" id="statusProgress"></div>
+          <div class="nyan-cat-runner" id="nyanRunner" title="Nyan Cat Engine">
+            <svg class="nyan-cat-sprite" viewBox="0 0 34 22" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="10" width="4" height="3" fill="#999" />
+              <rect x="2" y="8" width="3" height="3" fill="#999" />
+              <rect x="5" y="3" width="18" height="16" rx="2" fill="#fcd1a6" stroke="#000" stroke-width="1" />
+              <rect x="7" y="5" width="14" height="12" fill="#ff99bb" />
+              <rect x="9" y="7" width="1.5" height="1.5" fill="#cc0066" />
+              <rect x="15" y="7" width="1.5" height="1.5" fill="#cc0066" />
+              <rect x="11" y="11" width="1.5" height="1.5" fill="#cc0066" />
+              <rect x="17" y="12" width="1.5" height="1.5" fill="#cc0066" />
+              <rect x="13" y="14" width="1.5" height="1.5" fill="#cc0066" />
+              <rect x="7" y="18" width="3" height="3" fill="#999" stroke="#000" stroke-width="0.8" />
+              <rect x="18" y="18" width="3" height="3" fill="#999" stroke="#000" stroke-width="0.8" />
+              <rect x="20" y="5" width="12" height="11" rx="2" fill="#999" stroke="#000" stroke-width="1" />
+              <polygon points="20,5 23,1 25,5" fill="#999" stroke="#000" stroke-width="0.8" />
+              <polygon points="27,5 29,1 32,5" fill="#999" stroke="#000" stroke-width="0.8" />
+              <rect x="23" y="8" width="2" height="2" fill="#000" />
+              <rect x="28" y="8" width="2" height="2" fill="#000" />
+              <rect x="23" y="8" width="0.8" height="0.8" fill="#fff" />
+              <rect x="28" y="8" width="0.8" height="0.8" fill="#fff" />
+              <rect x="21" y="11" width="2.5" height="2" fill="#ff99bb" />
+              <rect x="29.5" y="11" width="2.5" height="2" fill="#ff99bb" />
+              <rect x="26" y="10" width="1.5" height="1" fill="#000" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- CONSOLA CLI DRAWER -->
+    <div class="console-drawer" id="consoleDrawer">
+      <div class="console-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <i data-lucide="terminal" style="width: 14px; height: 14px; color: #60a5fa;"></i>
+          <span>Registro de Operaciones &amp; Salida CLI</span>
+        </div>
+        <button class="modal-close" onclick="toggleConsole()" title="Cerrar consola">
+          <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+        </button>
+      </div>
+      <div class="console-body" id="consoleBody"></div>
+    </div>
+  </div>
+
+  <!-- MENÚ CONTEXTUAL CLIC DERECHO -->
+  <div class="context-menu" id="appContextMenu">
+    <button class="context-item" id="ctxRemoveBtn">
+      <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+      <span id="ctxRemoveLabel">Quitar del catálogo</span>
+    </button>
+  </div>
+
+  <!-- MODAL DE AJUSTES -->
+  <div class="modal-backdrop" id="settingsBackdrop" onclick="if(event.target===this) toggleSettingsModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="sliders" style="width: 17px; height: 17px; color: var(--primary);"></i>
+          <span>Ajustes de qInstall</span>
+        </div>
+        <button class="modal-close" onclick="toggleSettingsModal()"><i data-lucide="x" style="width: 16px;"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-group">
+          <div class="settings-group-title">Motor de Despliegue</div>
+          <label class="settings-toggle-row">
+            <div>
+              <div class="settings-label">Instalación silenciosa por defecto</div>
+              <div class="settings-desc">Aplica --silent y parámetros silenciosos del manifiesto offline</div>
+            </div>
+            <input type="checkbox" id="setSilent" checked class="settings-switch">
+          </label>
+          <label class="settings-toggle-row">
+            <div>
+              <div class="settings-label">Actualizar si la aplicación ya existe</div>
+              <div class="settings-desc">Comprueba actualizaciones vía Winget si ya está instalada</div>
+            </div>
+            <input type="checkbox" id="setUpgrade" checked class="settings-switch">
+          </label>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Carpeta Local Offline (Pendrive)</div>
+          <div class="settings-desc">Los archivos .exe/.msi colocados aquí se detectan automáticamente y funcionan sin Internet:</div>
+          <div class="settings-path-box" id="settingsLocalPath">local\</div>
+          <div class="settings-actions-row">
+            <button class="btn-tool" onclick="postToHost({ action: 'openLocalFolder' })"><i data-lucide="folder-open" style="width: 14px;"></i> Abrir carpeta local\</button>
+            <button class="btn-tool" onclick="requestAddLocalInstaller(); toggleSettingsModal();"><i data-lucide="folder-plus" style="width: 14px;"></i> Agregar instalador</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Mantenimiento &amp; Apariencia</div>
+          <div class="settings-actions-row">
+            <button class="btn-tool" onclick="postToHost({ action: 'purgeCache', includeOfflineCache: false })"><i data-lucide="trash-2" style="width: 14px;"></i> Purgar temporales</button>
+            <button class="btn-tool" onclick="confirmPurgeOfflineCache()"><i data-lucide="hard-drive" style="width: 14px;"></i> Vaciar caché offline</button>
+            <button class="btn-tool" onclick="replayLoadingScreen()"><i data-lucide="play-circle" style="width: 14px;"></i> Ver Pantalla de Carga</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-header" onclick="toggleSettingsModal()">Cerrar</button>
+        <button class="btn-tool" style="background: var(--primary); color:#fff; border-color: var(--primary);" onclick="saveSettings()"><i data-lucide="check" style="width: 14px;"></i> Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL GENÉRICO (RESUMEN / REEMPLAZO OBLIGATORIO / MODO OFFLINE) -->
+  <div class="modal-backdrop" id="dialogBackdrop" onclick="if(event.target===this) closeDialogModal()">
+    <div class="modal-box" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title" id="dialogTitle">Aviso</div>
+        <button class="modal-close" onclick="closeDialogModal()"><i data-lucide="x" style="width: 16px;"></i></button>
+      </div>
+      <div class="modal-body" id="dialogBody"></div>
+      <div class="modal-footer" id="dialogFooter"></div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,7 +1,9 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Microsoft.Web.WebView2.Core;
 
 namespace Qinstall
 {
@@ -26,7 +28,31 @@ namespace Qinstall
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+
+            if (CanUseWebView2())
+            {
+                Application.Run(new WebViewForm());
+            }
+            else
+            {
+                Application.Run(new MainForm());
+            }
+        }
+
+        private static bool CanUseWebView2()
+        {
+            try
+            {
+                string uiIndex = Path.Combine(AppCatalog.GetAppBaseDirectory(), "ui", "index.html");
+                if (!File.Exists(uiIndex)) return false;
+
+                string ver = CoreWebView2Environment.GetAvailableBrowserVersionString();
+                return !string.IsNullOrWhiteSpace(ver);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

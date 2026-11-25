@@ -1,5 +1,8 @@
 *.exe
 !office/setup.exe
+/Microsoft.Web.WebView2.Core.dll
+/Microsoft.Web.WebView2.WinForms.dll
+/WebView2Loader.dll
 local/*.exe
 local/*.msi
 local/cache/
