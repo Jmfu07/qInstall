@@ -407,27 +407,18 @@ function getFilteredApps() {
   );
 }
 
-function renderActiveView() {
-  const filtered = getFilteredApps();
-  if (state.viewMode === 'table') {
-    renderTableView(filtered);
-  } else if (state.viewMode === 'gallery') {
-    renderGalleryView(filtered);
-  } else {
-    renderCardsView(filtered);
-  }
-  refreshIcons();
+function getCategoryFilteredApps(baseList) {
+  if (!state.galleryCategory || state.galleryCategory === 'Todas') return baseList;
+  return baseList.filter(a => (a.category || 'Otros') === state.galleryCategory);
 }
 
-function selectGalleryCategory(cat) {
-  state.galleryCategory = cat;
-  renderActiveView();
+function getVisibleCatalogApps() {
+  return getCategoryFilteredApps(getFilteredApps());
 }
 
-function renderGalleryView(filtered) {
+function renderCategoryBar(filtered) {
   const catBar = document.getElementById('galleryCatBar');
-  const grid = document.getElementById('galleryGrid');
-  if (!catBar || !grid) return;
+  if (!catBar) return;
 
   const combined = [...filtered];
   if (state.searchQuery.trim().length >= 2 && state.onlineResults.length > 0) {
@@ -449,6 +440,43 @@ function renderGalleryView(filtered) {
     const iconName = c === 'Todas' ? 'layers' : (CATEGORY_ICONS[c.toLowerCase()] || 'box');
     return `<button class="gallery-cat-pill ${active}" onclick="selectGalleryCategory(decodeURIComponent('${enc}'))"><i data-lucide="${iconName}" style="width:12px;height:12px;"></i><span>${escapeHtml(c)}</span></button>`;
   }).join('');
+}
+
+function renderActiveView() {
+  const filtered = getFilteredApps();
+  renderCategoryBar(filtered);
+  const visible = getCategoryFilteredApps(filtered);
+
+  if (state.viewMode === 'table') {
+    renderTableView(visible);
+  } else if (state.viewMode === 'gallery') {
+    renderGalleryView(filtered);
+  } else {
+    renderCardsView(visible);
+  }
+  refreshIcons();
+  updateCounter();
+}
+
+function selectGalleryCategory(cat) {
+  state.galleryCategory = cat;
+  renderActiveView();
+  const scrollTarget = state.viewMode === 'table'
+    ? document.getElementById('appTableContainer')
+    : (state.viewMode === 'gallery'
+      ? document.getElementById('appGalleryContainer')
+      : document.getElementById('appGrid'));
+  if (scrollTarget) scrollTarget.scrollTop = 0;
+}
+
+function renderGalleryView(filtered) {
+  const grid = document.getElementById('galleryGrid');
+  if (!grid) return;
+
+  const combined = [...filtered];
+  if (state.searchQuery.trim().length >= 2 && state.onlineResults.length > 0) {
+    combined.push(...state.onlineResults);
+  }
 
   const items = state.galleryCategory === 'Todas'
     ? combined
@@ -685,7 +713,7 @@ function syncSelectionVisuals() {
 
 function updateCounter() {
   document.getElementById('selectedCount').textContent = state.selectedKeys.size;
-  const visible = getFilteredApps();
+  const visible = getVisibleCatalogApps();
   const hdrChk = document.getElementById('tableHeaderCheck');
   if (hdrChk) {
     hdrChk.checked = visible.length > 0 && visible.every(a => state.selectedKeys.has(a.key));
@@ -799,7 +827,7 @@ function updatePresetBadge() {
 
 function toggleAll() {
   if (state.isBusy) return;
-  const visible = getFilteredApps();
+  const visible = getVisibleCatalogApps();
   const btn = document.getElementById('filterAll');
   if (btn.classList.contains('active')) {
     clearSelection();

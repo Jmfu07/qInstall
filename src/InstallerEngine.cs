@@ -765,6 +765,7 @@ namespace Qinstall
             if (id == "rufus") return AnyNameEqualsOrPrefix(installedNames, "Rufus");
             if (id == "crystaldisk") return AnyNameStartsWith(installedNames, "CrystalDiskInfo");
             if (id == "cpuz") return AnyNameStartsWith(installedNames, "CPUID CPU-Z") || AnyNameEqualsOrPrefix(installedNames, "CPU-Z");
+            if (id == "nzxt_cam") return AnyNameStartsWith(installedNames, "NZXT CAM");
             if (id == "treesize") return AnyNameStartsWith(installedNames, "TreeSize Free");
             if (id == "wiztree") return AnyNameStartsWith(installedNames, "WizTree");
             if (id == "shutup10") return AnyNameStartsWith(installedNames, "O&O ShutUp10");
@@ -838,7 +839,8 @@ namespace Qinstall
             if (id == "sublime_text") return AnyNameStartsWith(installedNames, "Sublime Text");
             if (id == "zed") return AnyNameEqualsOrPrefix(installedNames, "Zed");
             if (id == "neovim") return AnyNameEqualsOrPrefix(installedNames, "Neovim");
-            if (id == "devcpp") return AnyNameStartsWith(installedNames, "Embarcadero Dev-C++") || AnyNameStartsWith(installedNames, "Dev-C++");
+            if (id == "devcpp_592") return AnyNameMatchesAll(installedNames, "Dev-C++", "5.9", "");
+            if (id == "devcpp") return AnyNameStartsWith(installedNames, "Embarcadero Dev-C++") || AnyNameMatchesAll(installedNames, "Dev-C++", "6.", "");
             if (id == "codeblocks") return AnyNameStartsWith(installedNames, "Code::Blocks") || AnyNameStartsWith(installedNames, "CodeBlocks");
             if (id == "arduino_ide") return AnyNameStartsWith(installedNames, "Arduino IDE");
             if (id == "godot") return AnyNameStartsWith(installedNames, "Godot Engine");

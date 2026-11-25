@@ -132,6 +132,16 @@
       "Essential": false
     },
     {
+      "Id": "nzxt_cam",
+      "Name": "NZXT CAM",
+      "Category": "Utilidades",
+      "Description": "Monitoreo de PC, temperaturas, ventiladores y control RGB NZXT",
+      "Source": "winget",
+      "Target": "NZXT.CAM",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "treesize",
       "Name": "TreeSize Free",
       "Category": "Utilidades",
@@ -959,6 +969,16 @@
       "Source": "winget",
       "Target": "Neovim.Neovim",
       "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "devcpp_592",
+      "Name": "Dev-C++ 5.9.2 (Orwell)",
+      "Category": "IDEs y JetBrains",
+      "Description": "Version clasica Dev-C++ 5.9.2 con compilador TDM-GCC 4.8.1 integrado",
+      "Source": "url",
+      "Target": "https://sourceforge.net/projects/orwelldevcpp/files/Setup%20Releases/Dev-Cpp%205.9.2%20TDM-GCC%204.8.1%20Setup.exe/download",
+      "SilentArgs": "/S",
       "Essential": false
     },
     {
