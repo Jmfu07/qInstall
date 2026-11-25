@@ -50,7 +50,7 @@ namespace Qinstall
             Apps = new List<AppItem>();
         }
 
-        public static string GetCatalogPath()
+        public static string GetAppBaseDirectory()
         {
             string baseDir = null;
             try
@@ -68,7 +68,68 @@ namespace Qinstall
             {
                 baseDir = AppDomain.CurrentDomain.BaseDirectory;
             }
-            return Path.Combine(baseDir, "apps.json");
+            return baseDir;
+        }
+
+        public static string GetLocalInstallersDirectory()
+        {
+            return Path.Combine(GetAppBaseDirectory(), "local");
+        }
+
+        public static string GetCatalogPath()
+        {
+            return Path.Combine(GetAppBaseDirectory(), "apps.json");
+        }
+
+        public static List<AppItem> DiscoverFolderLocalInstallers(AppCatalog existingCatalog)
+        {
+            List<AppItem> discovered = new List<AppItem>();
+            string localDir = GetLocalInstallersDirectory();
+            if (!Directory.Exists(localDir)) return discovered;
+
+            HashSet<string> trackedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (existingCatalog != null && existingCatalog.Apps != null)
+            {
+                for (int i = 0; i < existingCatalog.Apps.Count; i++)
+                {
+                    AppItem a = existingCatalog.Apps[i];
+                    if (string.Equals(a.Source, "local", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(a.Target))
+                    {
+                        trackedTargets.Add(a.Target.Trim());
+                        trackedTargets.Add(Path.GetFileName(a.Target.Trim()));
+                    }
+                }
+            }
+
+            try
+            {
+                string[] files = Directory.GetFiles(localDir);
+                for (int i = 0; i < files.Length; i++)
+                {
+                    string ext = Path.GetExtension(files[i]).ToLowerInvariant();
+                    if (ext != ".exe" && ext != ".msi") continue;
+
+                    string fileName = Path.GetFileName(files[i]);
+                    string relTarget = Path.Combine("local", fileName);
+                    if (trackedTargets.Contains(relTarget) || trackedTargets.Contains(fileName)) continue;
+
+                    AppItem item = new AppItem();
+                    item.Id = "local_" + Path.GetFileNameWithoutExtension(fileName).ToLowerInvariant().Replace(" ", "_");
+                    item.Name = Path.GetFileNameWithoutExtension(fileName);
+                    item.Category = "Instaladores Locales";
+                    item.Description = "Instalador offline detectado automaticamente en carpeta local\\";
+                    item.Source = "local";
+                    item.Target = relTarget;
+                    item.SilentArgs = string.Empty;
+                    item.Essential = false;
+                    discovered.Add(item);
+                }
+            }
+            catch
+            {
+            }
+
+            return discovered;
         }
 
         public static AppCatalog LoadOrCreateDefault()

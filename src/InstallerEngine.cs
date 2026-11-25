@@ -4,6 +4,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Security.Principal;
 using System.Text;
 using System.Threading;
@@ -89,6 +91,83 @@ namespace Qinstall
             {
             }
             return null;
+        }
+
+        public static Task<bool> CheckInternetAsync()
+        {
+            return Task.Run(delegate
+            {
+                try
+                {
+                    if (!NetworkInterface.GetIsNetworkAvailable())
+                    {
+                        return false;
+                    }
+                }
+                catch
+                {
+                }
+
+                string[] hosts = new[] { "www.msftconnecttest.com", "1.1.1.1" };
+                int[] ports = new[] { 80, 443 };
+
+                for (int i = 0; i < hosts.Length; i++)
+                {
+                    try
+                    {
+                        using (TcpClient client = new TcpClient())
+                        {
+                            IAsyncResult ar = client.BeginConnect(hosts[i], ports[i], null, null);
+                            if (ar.AsyncWaitHandle.WaitOne(2000, false) && client.Connected)
+                            {
+                                client.EndConnect(ar);
+                                return true;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+                return false;
+            });
+        }
+
+        public static bool AppRequiresInternet(AppItem app)
+        {
+            if (app == null) return false;
+            string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src == "winget" || src == "url")
+            {
+                return true;
+            }
+            if (src == "powershell")
+            {
+                string cmd = app.Target ?? string.Empty;
+                return cmd.IndexOf("http://", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       cmd.IndexOf("https://", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            if (src == "local")
+            {
+                // Office Deployment Tool (/configure) requiere Internet a menos que exista la carpeta offline Office\Data
+                string args = app.SilentArgs ?? string.Empty;
+                if (args.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    string resolved = ResolveLocalPath((app.Target ?? string.Empty).Trim());
+                    if (!string.IsNullOrEmpty(resolved))
+                    {
+                        string dir = Path.GetDirectoryName(resolved);
+                        string offlineData = Path.Combine(dir, "Office", "Data");
+                        if (Directory.Exists(offlineData))
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            }
+            return true;
         }
 
         public void ResetCancellation()

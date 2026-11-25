@@ -29,6 +29,7 @@ namespace Qinstall
         private readonly Dictionary<string, bool> _selectedState = new Dictionary<string, bool>();
         private readonly Dictionary<string, AppItem> _onlineSelectedApps = new Dictionary<string, AppItem>();
         private readonly List<AppItem> _currentOnlineResults = new List<AppItem>();
+        private readonly List<AppItem> _autoDiscoveredLocalApps = new List<AppItem>();
         private readonly HashSet<string> _installedApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly Timer _searchDebounceTimer;
         private int _onlineSearchSeq;
@@ -36,9 +37,11 @@ namespace Qinstall
         private bool _isInstalling;
         private bool _cancelPending;
         private bool _wingetAvailable;
+        private bool _hasInternet = true;
         private bool _logVisible = false;
 
         // UI Controls
+        private Label _lblInternetStatus;
         private Label _lblWingetStatus;
         private Button _btnInstallWinget;
         private Button _btnAdmin;
@@ -151,6 +154,16 @@ namespace Qinstall
             _lblWingetStatus.Margin = new Padding(8, 0, 0, 0);
             pnlStatusBadges.Controls.Add(_lblWingetStatus);
 
+            _lblInternetStatus = new Label();
+            _lblInternetStatus.Text = "Red...";
+            _lblInternetStatus.AutoSize = true;
+            _lblInternetStatus.Padding = new Padding(10, 7, 10, 7);
+            _lblInternetStatus.BackColor = _bgControl;
+            _lblInternetStatus.ForeColor = _textMuted;
+            _lblInternetStatus.Font = new Font("Segoe UI Semibold", 8.5f);
+            _lblInternetStatus.Margin = new Padding(8, 0, 0, 0);
+            pnlStatusBadges.Controls.Add(_lblInternetStatus);
+
             // 2. TOOLBAR
             Panel pnlToolbar = new Panel();
             pnlToolbar.Dock = DockStyle.Top;
@@ -199,13 +212,16 @@ namespace Qinstall
             btnClear.Click += BtnClear_Click;
             pnlActions.Controls.Add(btnClear);
 
-            Button btnAddApp = CreateFlatButton("+ Agregar app", 112, 30, Color.FromArgb(46, 125, 246));
-            btnAddApp.Margin = new Padding(0, 0, 8, 0);
-            btnAddApp.Click += BtnAddApp_Click;
-            pnlActions.Controls.Add(btnAddApp);
+            Button btnAddLocal = CreateFlatButton("+ Instalador local", 132, 30, Color.FromArgb(36, 120, 82));
+            btnAddLocal.Margin = new Padding(0, 0, 8, 0);
+            _toolTip.SetToolTip(btnAddLocal, "Agrega un .exe o .msi a la carpeta local\\ para instalar sin Internet");
+            btnAddLocal.Click += BtnAddApp_Click;
+            pnlActions.Controls.Add(btnAddLocal);
 
-            Button btnReload = CreateFlatButton("Recargar", 80, 30, _bgControl);
-            btnReload.Click += delegate { LoadCatalogAndRender(); RefreshInstalledAppsAsync(); };
+            Button btnReload = CreateFlatButton("\u21bb", 34, 30, _bgControl);
+            btnReload.Font = new Font("Segoe UI Bold", 11f);
+            _toolTip.SetToolTip(btnReload, "Re-escanear conexion a Internet, carpeta local\\ y apps instaladas");
+            btnReload.Click += delegate { LoadCatalogAndRender(); CheckEnvironmentAsync(); };
             pnlActions.Controls.Add(btnReload);
 
             // 3. FOOTER (barra de progreso + boton instalar)
@@ -315,7 +331,15 @@ namespace Qinstall
 
         private async void CheckEnvironmentAsync()
         {
-            string version = await Task.Run(delegate { return InstallerEngine.GetWingetVersion(); });
+            Task<bool> netTask = InstallerEngine.CheckInternetAsync();
+            Task<string> wingetTask = Task.Run(delegate { return InstallerEngine.GetWingetVersion(); });
+
+            bool online = await netTask;
+            string version = await wingetTask;
+            if (this.IsDisposed) return;
+
+            UpdateInternetBadge(online);
+
             if (!string.IsNullOrEmpty(version))
             {
                 _wingetAvailable = true;
@@ -331,11 +355,29 @@ namespace Qinstall
                 _lblWingetStatus.Text = "Winget no encontrado";
                 _lblWingetStatus.BackColor = Color.FromArgb(110, 42, 46);
                 _lblWingetStatus.ForeColor = Color.FromArgb(255, 200, 200);
-                _btnInstallWinget.Visible = true;
-                AppendLog("[!] Winget no esta disponible en este equipo. Puedes instalarlo con el boton 'Instalar Winget' o usar apps por URL/Local.");
+                _btnInstallWinget.Visible = online;
+                AppendLog("[!] Winget no esta disponible en este equipo. Puedes instalarlo con el boton 'Instalar Winget' o usar instaladores locales.");
             }
 
+            RenderCategories(_txtSearch != null ? _txtSearch.Text : string.Empty);
             RefreshInstalledAppsAsync();
+        }
+
+        private void UpdateInternetBadge(bool online)
+        {
+            _hasInternet = online;
+            if (online)
+            {
+                _lblInternetStatus.Text = "Internet: OK";
+                _lblInternetStatus.BackColor = Color.FromArgb(24, 78, 52);
+                _lblInternetStatus.ForeColor = Color.FromArgb(165, 240, 195);
+            }
+            else
+            {
+                _lblInternetStatus.Text = "Sin Internet (Offline)";
+                _lblInternetStatus.BackColor = Color.FromArgb(135, 78, 22);
+                _lblInternetStatus.ForeColor = Color.FromArgb(255, 225, 165);
+            }
         }
 
         private async void RefreshInstalledAppsAsync()
@@ -385,7 +427,27 @@ namespace Qinstall
         private void LoadCatalogAndRender()
         {
             _catalog = AppCatalog.LoadOrCreateDefault();
+            _autoDiscoveredLocalApps.Clear();
+            List<AppItem> extraLocals = AppCatalog.DiscoverFolderLocalInstallers(_catalog);
+            for (int i = 0; i < extraLocals.Count; i++)
+            {
+                _autoDiscoveredLocalApps.Add(extraLocals[i]);
+            }
             RenderCategories(_txtSearch != null ? _txtSearch.Text : string.Empty);
+        }
+
+        private List<AppItem> GetAllCatalogApps()
+        {
+            List<AppItem> all = new List<AppItem>();
+            if (_catalog != null && _catalog.Apps != null)
+            {
+                all.AddRange(_catalog.Apps);
+            }
+            if (_autoDiscoveredLocalApps.Count > 0)
+            {
+                all.AddRange(_autoDiscoveredLocalApps);
+            }
+            return all;
         }
 
         private void TxtSearch_TextChanged(object sender, EventArgs e)
@@ -402,10 +464,10 @@ namespace Qinstall
                 return;
             }
 
-            _isSearchingOnline = _wingetAvailable;
+            _isSearchingOnline = _wingetAvailable && _hasInternet;
             RenderCategories(query);
 
-            if (_wingetAvailable)
+            if (_wingetAvailable && _hasInternet)
             {
                 _searchDebounceTimer.Start();
             }
@@ -418,7 +480,7 @@ namespace Qinstall
                 e.SuppressKeyPress = true;
                 _searchDebounceTimer.Stop();
                 string query = (_txtSearch.Text ?? string.Empty).Trim();
-                if (query.Length >= 2 && _wingetAvailable)
+                if (query.Length >= 2 && _wingetAvailable && _hasInternet)
                 {
                     SearchOnlineWingetAsync(query);
                 }
@@ -434,7 +496,7 @@ namespace Qinstall
         {
             _searchDebounceTimer.Stop();
             string query = (_txtSearch.Text ?? string.Empty).Trim();
-            if (query.Length >= 2 && _wingetAvailable)
+            if (query.Length >= 2 && _wingetAvailable && _hasInternet)
             {
                 SearchOnlineWingetAsync(query);
             }
@@ -491,9 +553,10 @@ namespace Qinstall
             Dictionary<string, List<AppItem>> grouped = new Dictionary<string, List<AppItem>>(StringComparer.OrdinalIgnoreCase);
             List<string> categoryOrder = new List<string>();
 
-            for (int i = 0; i < _catalog.Apps.Count; i++)
+            List<AppItem> allApps = GetAllCatalogApps();
+            for (int i = 0; i < allApps.Count; i++)
             {
-                AppItem app = _catalog.Apps[i];
+                AppItem app = allApps[i];
                 if (!string.IsNullOrEmpty(query))
                 {
                     bool match =
@@ -522,7 +585,7 @@ namespace Qinstall
             }
 
             // Tarjeta de resultados online desde Winget cuando el usuario busca
-            if (query.Length >= 2 && _wingetAvailable)
+            if (query.Length >= 2 && _wingetAvailable && _hasInternet)
             {
                 if (_currentOnlineResults.Count > 0)
                 {
@@ -730,13 +793,22 @@ namespace Qinstall
             _lblStatus.Text = "'" + app.Name + "' quitada del catalogo.";
         }
 
-        private static void ApplyTagStyle(Label lblTag, AppItem app, bool installed)
+        private void ApplyTagStyle(Label lblTag, AppItem app, bool installed)
         {
             if (installed)
             {
                 lblTag.Text = "INSTALADO";
                 lblTag.BackColor = Color.FromArgb(26, 98, 60);
                 lblTag.ForeColor = Color.FromArgb(175, 250, 205);
+                return;
+            }
+
+            bool needsNet = InstallerEngine.AppRequiresInternet(app);
+            if (!_hasInternet && needsNet)
+            {
+                lblTag.Text = "SIN RED";
+                lblTag.BackColor = Color.FromArgb(72, 46, 48);
+                lblTag.ForeColor = Color.FromArgb(225, 165, 170);
                 return;
             }
 
@@ -759,9 +831,15 @@ namespace Qinstall
                 lblTag.BackColor = Color.FromArgb(95, 68, 22);
                 lblTag.ForeColor = Color.FromArgb(255, 220, 140);
             }
+            else if (!needsNet)
+            {
+                lblTag.Text = "OFFLINE";
+                lblTag.BackColor = Color.FromArgb(22, 92, 82);
+                lblTag.ForeColor = Color.FromArgb(150, 245, 225);
+            }
             else
             {
-                lblTag.Text = src;
+                lblTag.Text = "ONLINE";
                 lblTag.BackColor = Color.FromArgb(36, 80, 56);
                 lblTag.ForeColor = Color.FromArgb(155, 235, 185);
             }
@@ -772,9 +850,10 @@ namespace Qinstall
             List<AppItem> selected = new List<AppItem>();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            for (int i = 0; i < _catalog.Apps.Count; i++)
+            List<AppItem> allApps = GetAllCatalogApps();
+            for (int i = 0; i < allApps.Count; i++)
             {
-                AppItem app = _catalog.Apps[i];
+                AppItem app = allApps[i];
                 string key = GetAppKey(app);
                 bool isSel;
                 if (_selectedState.TryGetValue(key, out isSel) && isSel && seen.Add(key))
@@ -807,9 +886,10 @@ namespace Qinstall
         {
             if (_isInstalling) return;
             _selectedState.Clear();
-            for (int i = 0; i < _catalog.Apps.Count; i++)
+            List<AppItem> allApps = GetAllCatalogApps();
+            for (int i = 0; i < allApps.Count; i++)
             {
-                AppItem app = _catalog.Apps[i];
+                AppItem app = allApps[i];
                 string key = GetAppKey(app);
                 // Seleccionar esenciales que aun no estan instaladas
                 _selectedState[key] = app.Essential && !_installedApps.Contains(key);
@@ -867,8 +947,8 @@ namespace Qinstall
                     _catalog.Apps.Add(dlg.CreatedApp);
                     AppCatalog.Save(_catalog);
                     _selectedState[GetAppKey(dlg.CreatedApp)] = true;
-                    RenderCategories(_txtSearch.Text);
-                    AppendLog("[+] Aplicacion agregada y guardada en apps.json: " + dlg.CreatedApp.Name);
+                    LoadCatalogAndRender();
+                    AppendLog("[+] Instalador local agregado: " + dlg.CreatedApp.Name);
                 }
             }
         }
@@ -930,6 +1010,64 @@ namespace Qinstall
             {
                 MessageBox.Show(this, "Selecciona al menos una aplicacion para instalar.", "Qinstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
+            }
+
+            // Validar conexion a Internet en tiempo real antes de instalar
+            _lblStatus.Text = "Verificando conexion a Internet...";
+            bool onlineNow = await InstallerEngine.CheckInternetAsync();
+            UpdateInternetBadge(onlineNow);
+
+            if (!onlineNow)
+            {
+                List<AppItem> needsNet = new List<AppItem>();
+                List<AppItem> offlineReady = new List<AppItem>();
+                for (int i = 0; i < selected.Count; i++)
+                {
+                    if (InstallerEngine.AppRequiresInternet(selected[i]))
+                        needsNet.Add(selected[i]);
+                    else
+                        offlineReady.Add(selected[i]);
+                }
+
+                if (needsNet.Count > 0)
+                {
+                    StringBuilder sbNet = new StringBuilder();
+                    for (int i = 0; i < needsNet.Count; i++)
+                    {
+                        sbNet.AppendLine(" - " + needsNet[i].Name);
+                    }
+
+                    if (offlineReady.Count == 0)
+                    {
+                        _lblStatus.Text = "Sin conexion a Internet. Solo puedes instalar apps OFFLINE de la carpeta local\\.";
+                        MessageBox.Show(
+                            this,
+                            "No se detecto conexion a Internet en este equipo.\n\nLas siguientes aplicaciones requieren Internet para descargarse/instalarse:\n" +
+                            sbNet.ToString() +
+                            "\nConecta el equipo a Internet o usa instaladores locales (etiqueta OFFLINE en la carpeta local\\).",
+                            "Sin conexion a Internet — Qinstall",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                        RenderCategories(_txtSearch.Text);
+                        return;
+                    }
+
+                    DialogResult askOffline = MessageBox.Show(
+                        this,
+                        "No hay conexion a Internet.\n\nEstas aplicaciones requieren Internet y se omitiran:\n" +
+                        sbNet.ToString() +
+                        string.Format("\n¿Deseas continuar e instalar las {0} aplicaciones locales/offline seleccionadas?", offlineReady.Count),
+                        "Modo sin Internet — Qinstall",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+                    if (askOffline != DialogResult.Yes)
+                    {
+                        _lblStatus.Text = "Instalacion cancelada (sin conexion a Internet).";
+                        RenderCategories(_txtSearch.Text);
+                        return;
+                    }
+                    selected = offlineReady;
+                }
             }
 
             bool needsWinget = false;

@@ -1,0 +1,4 @@
+Coloca aqui tus instaladores locales (.exe o .msi) para usarlos sin conexion a Internet.
+
+Qinstall detecta automaticamente cualquier .exe o .msi en esta carpeta,
+o puedes agregarlos con argumentos silenciosos usando el boton "+ Instalador local".
