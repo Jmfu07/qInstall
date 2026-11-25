@@ -275,6 +275,12 @@ if (window.chrome && window.chrome.webview) {
       case 'exportDone':
         handleExportDone(msg);
         break;
+      case 'localInstallerPicked':
+        handleLocalInstallerPicked(msg);
+        break;
+      case 'localInstallerSaved':
+        handleLocalInstallerSaved(msg);
+        break;
       case 'summary':
         setBusyState(false, 'idle');
         showSummaryModal(msg.title, msg.headline, msg.items || [], !!msg.hasFailures);
@@ -753,10 +759,11 @@ function renderTableView(items) {
       : (app.cachedVersion ? `v${escapeHtml(app.cachedVersion)}` : (app.hasOffline ? 'Local listo' : '—'));
     const sourceLabel = (app.source || 'winget').toUpperCase();
     const actionLabel = app.outdated ? 'Reemplazar' : (app.installed ? 'Reinstalar' : (isSel ? 'Quitar' : 'Seleccionar'));
+    const ctxAttr = isOnline ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encodedKey}'))"`;
 
     return `
       <tr class="table-row ${isSel ? 'selected' : ''}" data-key="${escapeHtml(app.key)}"
-          onclick="toggleAppSelection(decodeURIComponent('${encodedKey}'), ${isOnline})">
+          onclick="toggleAppSelection(decodeURIComponent('${encodedKey}'), ${isOnline})" ${ctxAttr}>
         <td style="text-align:center;">
           <div class="custom-checkbox" style="margin:auto;">${CHECK_SVG}</div>
         </td>
@@ -818,7 +825,14 @@ function toggleAppSelection(key, isOnlineSearch) {
 function syncSelectionVisuals() {
   document.querySelectorAll('.app-row, .table-row, .gallery-card').forEach(el => {
     const k = el.getAttribute('data-key');
-    el.classList.toggle('selected', state.selectedKeys.has(k));
+    const isSel = state.selectedKeys.has(k);
+    el.classList.toggle('selected', isSel);
+    if (el.classList.contains('table-row')) {
+      const btn = el.querySelector('.table-action-btn');
+      if (btn && (btn.textContent === 'Seleccionar' || btn.textContent === 'Quitar')) {
+        btn.textContent = isSel ? 'Quitar' : 'Seleccionar';
+      }
+    }
   });
 }
 
@@ -831,7 +845,7 @@ function updateCounter() {
   }
 }
 
-function switchView(mode) {
+function switchView(mode, persist = true) {
   state.viewMode = mode;
   localStorage.setItem('qinstall_view', mode);
   document.getElementById('appGrid').style.display = mode === 'cards' ? 'grid' : 'none';
@@ -842,6 +856,7 @@ function switchView(mode) {
   document.getElementById('viewBtnTable').classList.toggle('active', mode === 'table');
   if (state.apps.length > 0) {
     renderActiveView();
+    if (persist) persistPortableProfiles();
   }
 }
 
@@ -877,7 +892,13 @@ function toggleEssentialsMenu(e) {
 
 function renderEssentialsPicker() {
   const picker = document.getElementById('essentialsPicker');
-  picker.innerHTML = state.apps.map(app => {
+  const qEl = document.getElementById('essentialsSearchInput');
+  const q = qEl ? qEl.value.toLowerCase().trim() : '';
+  const list = q
+    ? state.apps.filter(a => (a.name && a.name.toLowerCase().includes(q)) || (a.category && a.category.toLowerCase().includes(q)))
+    : state.apps;
+
+  picker.innerHTML = list.map(app => {
     const checked = currentEssentialApps.includes(app.name);
     const enc = encodeJsArg(app.name);
     return `
@@ -1082,7 +1103,98 @@ function quickSaveOnline(key) {
   postToHost({ action: 'quickSaveOnline', app });
 }
 
-function requestAddLocalInstaller() { postToHost({ action: 'addLocalInstaller' }); }
+function requestAddLocalInstaller() {
+  if (state.isBusy) {
+    showToast('Espera a que termine la operación actual.', 'warn');
+    return;
+  }
+  const modal = document.getElementById('addLocalBackdrop');
+  if (!modal) return;
+
+  // Reset campos y poblar categorias existentes + Instaladores Locales
+  document.getElementById('addLocalFilePath').value = '';
+  document.getElementById('addLocalFileMeta').textContent = 'Ningún archivo seleccionado';
+  document.getElementById('addLocalName').value = '';
+  document.getElementById('addLocalDesc').value = '';
+  document.getElementById('addLocalSilentArgs').value = '';
+  document.getElementById('addLocalPreset').value = '';
+  document.getElementById('addLocalCopyChk').checked = true;
+  document.getElementById('addLocalEssential').checked = false;
+
+  const sel = document.getElementById('addLocalCategory');
+  const cats = ['Instaladores Locales'];
+  for (const app of state.apps) {
+    const c = app.category || 'Otros';
+    if (!cats.includes(c)) cats.push(c);
+  }
+  sel.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  sel.value = 'Instaladores Locales';
+
+  modal.classList.add('show');
+  refreshIcons();
+}
+
+function closeAddLocalModal() {
+  const modal = document.getElementById('addLocalBackdrop');
+  if (modal) modal.classList.remove('show');
+}
+
+function applySilentArgPreset(val) {
+  if (val) document.getElementById('addLocalSilentArgs').value = val;
+}
+
+function handleLocalInstallerPicked(msg) {
+  if (!msg || !msg.path) return;
+  document.getElementById('addLocalFilePath').value = msg.path;
+  document.getElementById('addLocalFileMeta').textContent = `${msg.fileName || ''} · ${formatBytes(msg.sizeBytes || 0)}`;
+  const nameInp = document.getElementById('addLocalName');
+  if (nameInp && !nameInp.value.trim() && msg.suggestedName) {
+    nameInp.value = msg.suggestedName;
+  }
+  const argsInp = document.getElementById('addLocalSilentArgs');
+  if (argsInp && !argsInp.value.trim() && msg.suggestedSilentArgs) {
+    argsInp.value = msg.suggestedSilentArgs;
+  }
+}
+
+function submitAddLocalInstaller() {
+  const filePath = document.getElementById('addLocalFilePath').value.trim();
+  const name = document.getElementById('addLocalName').value.trim();
+  const category = document.getElementById('addLocalCategory').value;
+  const description = document.getElementById('addLocalDesc').value.trim();
+  const silentArgs = document.getElementById('addLocalSilentArgs').value.trim();
+  const copyToLocal = document.getElementById('addLocalCopyChk').checked;
+  const essential = document.getElementById('addLocalEssential').checked;
+
+  if (!filePath) {
+    showToast('Primero selecciona un archivo .exe o .msi con Examinar.', 'warn');
+    return;
+  }
+  if (!name) {
+    showToast('Escribe un nombre para mostrar.', 'warn');
+    return;
+  }
+
+  postToHost({
+    action: 'saveLocalInstaller',
+    filePath,
+    name,
+    category,
+    description,
+    silentArgs,
+    copyToLocal,
+    essential
+  });
+}
+
+function handleLocalInstallerSaved(msg) {
+  if (msg && msg.success) {
+    closeAddLocalModal();
+    showToast(msg.message || 'Instalador local agregado correctamente.', 'success');
+  } else {
+    showToast((msg && msg.message) || 'No se pudo agregar el instalador local.', 'warn');
+  }
+}
 function requestRefresh() { postToHost({ action: 'refresh' }); }
 function requestInstallWinget() { postToHost({ action: 'installWinget' }); }
 function requestRunAsAdmin() { postToHost({ action: 'runAsAdmin' }); }
@@ -1131,6 +1243,9 @@ function appendLog(time, message, level) {
   div.className = level === 'success' ? 'log-success' : (level === 'warn' ? 'log-warn' : 'log-info');
   div.textContent = `[${time}] ${message}`;
   body.appendChild(div);
+  while (body.childElementCount > 400) {
+    body.removeChild(body.firstChild);
+  }
   body.scrollTop = body.scrollHeight;
 }
 
@@ -1172,7 +1287,7 @@ function applyPortableProfiles(p) {
     applyTheme(p.theme);
   }
   if (p.viewMode && (p.viewMode === 'cards' || p.viewMode === 'gallery' || p.viewMode === 'table')) {
-    switchView(p.viewMode);
+    switchView(p.viewMode, false);
   }
 }
 
@@ -1636,6 +1751,7 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape') {
     document.getElementById('settingsBackdrop').classList.remove('show');
     document.getElementById('exportBackdrop').classList.remove('show');
+    document.getElementById('addLocalBackdrop').classList.remove('show');
     document.getElementById('dialogBackdrop').classList.remove('show');
     document.getElementById('themeMenu').classList.remove('show');
     document.getElementById('essentialsMenu').classList.remove('show');
@@ -1670,7 +1786,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   } catch {}
 
   applyTheme(state.themeMode);
-  switchView(state.viewMode);
+  switchView(state.viewMode, false);
   refreshIcons();
   startSmoothLoader(true);
   postToHost({ action: 'init' });

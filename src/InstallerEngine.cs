@@ -1837,6 +1837,7 @@ namespace Qinstall
                     psi.StandardOutputEncoding = Encoding.UTF8;
                     psi.StandardErrorEncoding = Encoding.UTF8;
 
+                    object bufLock = new object();
                     using (Process proc = new Process())
                     {
                         proc.StartInfo = psi;
@@ -1847,7 +1848,7 @@ namespace Qinstall
                                 string cleaned = CleanWingetLine(e.Data);
                                 if (!string.IsNullOrWhiteSpace(cleaned))
                                 {
-                                    outputBuffer.AppendLine(cleaned);
+                                    lock (bufLock) { outputBuffer.AppendLine(cleaned); }
                                     if (logOutput) EmitLog("    " + cleaned);
                                 }
                             }
@@ -1859,7 +1860,7 @@ namespace Qinstall
                                 string cleaned = CleanWingetLine(e.Data);
                                 if (!string.IsNullOrWhiteSpace(cleaned))
                                 {
-                                    outputBuffer.AppendLine(cleaned);
+                                    lock (bufLock) { outputBuffer.AppendLine(cleaned); }
                                     if (logOutput) EmitLog("    " + cleaned);
                                 }
                             }

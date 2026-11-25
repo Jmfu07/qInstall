@@ -32,6 +32,7 @@ namespace Qinstall
         private bool _wingetAvailable;
         private string _wingetVersion = string.Empty;
         private bool _isBusy;
+        private bool _isRefreshing;
         private int _searchSeq;
 
         public WebViewForm()
@@ -164,6 +165,12 @@ namespace Qinstall
                         break;
                     case "addLocalInstaller":
                         HandleAddLocalInstaller();
+                        break;
+                    case "pickLocalInstallerFile":
+                        HandlePickLocalInstallerFile();
+                        break;
+                    case "saveLocalInstaller":
+                        HandleSaveLocalInstaller(msg);
                         break;
                     case "installSelected":
                         await HandleInstallSelectedAsync(msg);
@@ -317,38 +324,46 @@ namespace Qinstall
 
         private async Task HandleRefreshAsync()
         {
-            if (_isBusy) return;
-            PostLog("Re-escaneando red, carpeta local\\ y aplicaciones instaladas...", "info");
-
-            Task<bool> netTask = InstallerEngine.CheckInternetAsync();
-            Task<string> wingetTask = Task.Run(delegate { return InstallerEngine.GetWingetVersion(); });
-            _hasInternet = await netTask;
-            string ver = await wingetTask;
-            _wingetAvailable = !string.IsNullOrEmpty(ver);
-            _wingetVersion = ver ?? string.Empty;
-
-            ReloadCatalogInternal();
-            List<AppItem> allApps = GetAllApps();
-            HashSet<string> detected = await _engine.DetectInstalledAppKeysAsync(allApps);
-            _installedKeys.Clear();
-            foreach (string k in detected) _installedKeys.Add(k);
-
-            _outdatedCaches.Clear();
-            if (_hasInternet && _wingetAvailable)
+            if (_isBusy || _isRefreshing) return;
+            _isRefreshing = true;
+            try
             {
-                Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(allApps);
-                foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
+                PostLog("Re-escaneando red, carpeta local\\ y aplicaciones instaladas...", "info");
+
+                Task<bool> netTask = InstallerEngine.CheckInternetAsync();
+                Task<string> wingetTask = Task.Run(delegate { return InstallerEngine.GetWingetVersion(); });
+                _hasInternet = await netTask;
+                string ver = await wingetTask;
+                _wingetAvailable = !string.IsNullOrEmpty(ver);
+                _wingetVersion = ver ?? string.Empty;
+
+                ReloadCatalogInternal();
+                List<AppItem> allApps = GetAllApps();
+                HashSet<string> detected = await _engine.DetectInstalledAppKeysAsync(allApps);
+                _installedKeys.Clear();
+                foreach (string k in detected) _installedKeys.Add(k);
+
+                _outdatedCaches.Clear();
+                if (_hasInternet && _wingetAvailable)
                 {
-                    _outdatedCaches[kv.Key] = kv.Value;
+                    Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                    foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
+                    {
+                        _outdatedCaches[kv.Key] = kv.Value;
+                    }
+                }
+
+                PostStateUpdate();
+                PostToast(string.Format("Actualizado: {0} apps en catalogo, {1} instaladas.", allApps.Count, _installedKeys.Count), "success");
+
+                if (_outdatedCaches.Count > 0)
+                {
+                    PostOutdatedAlert(_outdatedCaches);
                 }
             }
-
-            PostStateUpdate();
-            PostToast(string.Format("Actualizado: {0} apps en catalogo, {1} instaladas.", allApps.Count, _installedKeys.Count), "success");
-
-            if (_outdatedCaches.Count > 0)
+            finally
             {
-                PostOutdatedAlert(_outdatedCaches);
+                _isRefreshing = false;
             }
         }
 
@@ -453,10 +468,147 @@ namespace Qinstall
             if (target == null) return;
 
             _catalog.Apps.Remove(target);
+            _outdatedCaches.Remove(key);
             AppCatalog.Save(_catalog);
             ReloadCatalogInternal();
             PostStateUpdate();
             PostToast("'" + target.Name + "' quitada del catalogo.", "info");
+        }
+
+        private void HandlePickLocalInstallerFile()
+        {
+            try
+            {
+                using (OpenFileDialog ofd = new OpenFileDialog())
+                {
+                    ofd.Title = "Seleccionar instalador (.exe o .msi)";
+                    ofd.Filter = "Instaladores Windows (*.exe;*.msi)|*.exe;*.msi|Todos los archivos (*.*)|*.*";
+                    if (ofd.ShowDialog(this) == DialogResult.OK && File.Exists(ofd.FileName))
+                    {
+                        FileInfo fi = new FileInfo(ofd.FileName);
+                        string rawName = Path.GetFileNameWithoutExtension(ofd.FileName);
+                        string cleanName = rawName.Replace('_', ' ').Replace('-', ' ').Trim();
+                        string ext = Path.GetExtension(ofd.FileName).ToLowerInvariant();
+                        string suggestedArgs = ext == ".msi" ? "/qn /norestart" : string.Empty;
+
+                        PostMessage(new Dictionary<string, object>
+                        {
+                            { "type", "localInstallerPicked" },
+                            { "path", ofd.FileName },
+                            { "fileName", fi.Name },
+                            { "suggestedName", cleanName },
+                            { "sizeBytes", fi.Length },
+                            { "suggestedSilentArgs", suggestedArgs }
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PostToast("No se pudo abrir el selector de archivos: " + ex.Message, "warn");
+            }
+        }
+
+        private void HandleSaveLocalInstaller(Dictionary<string, object> msg)
+        {
+            if (_isBusy) return;
+            string filePath = GetStr(msg, "filePath").Trim();
+            string name = GetStr(msg, "name").Trim();
+            string category = GetStr(msg, "category").Trim();
+            string desc = GetStr(msg, "description").Trim();
+            string silentArgs = GetStr(msg, "silentArgs").Trim();
+            bool copyToLocal = GetBool(msg, "copyToLocal", true);
+            bool essential = GetBool(msg, "essential", false);
+
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            {
+                PostMessage(new Dictionary<string, object>
+                {
+                    { "type", "localInstallerSaved" },
+                    { "success", false },
+                    { "message", "Selecciona un archivo instalador (.exe o .msi) valido." }
+                });
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = Path.GetFileNameWithoutExtension(filePath).Replace('_', ' ').Replace('-', ' ').Trim();
+            }
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                category = "Instaladores Locales";
+            }
+
+            try
+            {
+                FileInfo srcFi = new FileInfo(filePath);
+                string finalTarget = filePath;
+
+                if (copyToLocal)
+                {
+                    string localDir = AppCatalog.GetLocalInstallersDirectory();
+                    Directory.CreateDirectory(localDir);
+
+                    // Validar espacio libre suficiente en la unidad antes de copiar instalador grande
+                    string localRoot = Path.GetPathRoot(localDir);
+                    if (!string.IsNullOrEmpty(localRoot))
+                    {
+                        DriveInfo di = new DriveInfo(localRoot);
+                        long safetyMargin = 256L * 1024L * 1024L;
+                        if (di.IsReady && di.AvailableFreeSpace < (srcFi.Length + safetyMargin))
+                        {
+                            double needMb = (srcFi.Length + safetyMargin) / (1024.0 * 1024.0);
+                            double freeMb = di.AvailableFreeSpace / (1024.0 * 1024.0);
+                            PostMessage(new Dictionary<string, object>
+                            {
+                                { "type", "localInstallerSaved" },
+                                { "success", false },
+                                { "message", string.Format("Espacio insuficiente en el almacenamiento ({0:0.0} MB libres; se requieren {1:0.0} MB incluyendo margen).", freeMb, needMb) }
+                            });
+                            return;
+                        }
+                    }
+
+                    string destPath = Path.Combine(localDir, srcFi.Name);
+                    if (!string.Equals(Path.GetFullPath(filePath), Path.GetFullPath(destPath), StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Copy(filePath, destPath, true);
+                    }
+                    finalTarget = Path.Combine("local", srcFi.Name);
+                }
+
+                AppItem item = new AppItem();
+                item.Id = "local_" + DateTime.Now.ToString("yyyyMMddHHmmss");
+                item.Name = name;
+                item.Category = category;
+                item.Description = string.IsNullOrWhiteSpace(desc) ? ("Instalador local offline (" + srcFi.Name + ")") : desc;
+                item.Source = "local";
+                item.Target = finalTarget;
+                item.SilentArgs = silentArgs;
+                item.Essential = essential;
+
+                _catalog.Apps.Add(item);
+                AppCatalog.Save(_catalog);
+                ReloadCatalogInternal();
+                PostStateUpdate();
+                PostLog("Instalador local agregado a apps.json: " + item.Name + " (" + item.Target + ")", "success");
+                PostMessage(new Dictionary<string, object>
+                {
+                    { "type", "localInstallerSaved" },
+                    { "success", true },
+                    { "message", "Instalador local agregado: " + item.Name }
+                });
+            }
+            catch (Exception ex)
+            {
+                PostMessage(new Dictionary<string, object>
+                {
+                    { "type", "localInstallerSaved" },
+                    { "success", false },
+                    { "message", "No se pudo agregar el instalador: " + ex.Message }
+                });
+            }
         }
 
         private void HandleAddLocalInstaller()

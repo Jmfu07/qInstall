@@ -224,6 +224,8 @@
               <span id="essentialsCountLabel" style="color:var(--primary); font-family:'Cascadia Code', monospace; font-size:10px;">0 apps</span>
             </div>
 
+            <input type="text" id="essentialsSearchInput" class="essentials-search-input" placeholder="Filtrar apps..." oninput="renderEssentialsPicker()">
+
             <div class="essentials-app-picker" id="essentialsPicker"></div>
 
             <div class="essentials-menu-footer">
@@ -554,6 +556,88 @@
         <button class="btn-header" onclick="closePortableExportModal()">Cerrar</button>
         <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="startPortableExport()">
           <i data-lucide="hard-drive-download" style="width:15px;height:15px;"></i> Copiar a unidad
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MODERNO: AGREGAR INSTALADOR LOCAL (WEBVIEW2 — RESPETA TEMA CLARO / OSCURO) -->
+  <div class="modal-backdrop" id="addLocalBackdrop" onclick="if(event.target===this) closeAddLocalModal()">
+    <div class="modal-box" style="max-width: 540px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="folder-plus" style="width: 17px; height: 17px; color: var(--cta-green);"></i>
+          <span>Agregar Instalador Local</span>
+        </div>
+        <button class="modal-close" onclick="closeAddLocalModal()"><i data-lucide="x" style="width: 16px;"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-desc">
+          Agrega cualquier instalador <b>.exe</b> o <b>.msi</b> para llevarlo offline en tu almacenamiento y ejecutarlo en PCs sin Internet.
+        </div>
+
+        <div class="settings-group">
+          <div class="form-field">
+            <label class="form-label" for="addLocalFilePath">Archivo instalador (.exe o .msi)</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="text" id="addLocalFilePath" class="form-input" placeholder="Selecciona un archivo .exe o .msi..." readonly style="flex:1; font-family:'Cascadia Code', monospace; font-size:11.5px;">
+              <button class="btn-tool" style="height:34px;" onclick="postToHost({ action: 'pickLocalInstallerFile' })">
+                <i data-lucide="folder-open" style="width:14px;height:14px;"></i> Examinar...
+              </button>
+            </div>
+            <span class="form-file-meta" id="addLocalFileMeta">Ningún archivo seleccionado</span>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="addLocalCopyChk" checked>
+            <span>Copiar archivo a <code>local\</code> (recomendado para llevar en el pendrive)</span>
+          </label>
+        </div>
+
+        <div class="settings-group">
+          <div class="form-grid-2">
+            <div class="form-field">
+              <label class="form-label" for="addLocalName">Nombre para mostrar</label>
+              <input type="text" id="addLocalName" class="form-input" placeholder="Ej. Mi Programa">
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="addLocalCategory">Categoría</label>
+              <select id="addLocalCategory" class="form-select"></select>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="addLocalDesc">Descripción corta (opcional)</label>
+            <input type="text" id="addLocalDesc" class="form-input" placeholder="Ej. Instalador offline personalizado">
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-field">
+              <label class="form-label" for="addLocalSilentArgs">Parámetros silenciosos (opcional)</label>
+              <input type="text" id="addLocalSilentArgs" class="form-input" placeholder="Ej. /S, /VERYSILENT, /qn">
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="addLocalPreset">Plantilla rápida</label>
+              <select id="addLocalPreset" class="form-select" onchange="applySilentArgPreset(this.value)">
+                <option value="">Elegir plantilla...</option>
+                <option value="/S">NSIS (/S)</option>
+                <option value="/VERYSILENT /NORESTART">Inno Setup (/VERYSILENT /NORESTART)</option>
+                <option value="/qn /norestart">MSI (/qn /norestart)</option>
+                <option value="/quiet /norestart">EXE estándar (/quiet /norestart)</option>
+              </select>
+            </div>
+          </div>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="addLocalEssential">
+            <span>Marcar como Esencial</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-header" onclick="closeAddLocalModal()">Cancelar</button>
+        <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="submitAddLocalInstaller()">
+          <i data-lucide="plus" style="width:15px;height:15px;"></i> Agregar al catálogo
         </button>
       </div>
     </div>
