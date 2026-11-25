@@ -128,14 +128,8 @@ namespace Qinstall
             pnlStatusBadges.Padding = new Padding(0, 12, 0, 0);
             pnlHeader.Controls.Add(pnlStatusBadges);
 
-            _btnAdmin = CreateFlatButton(
-                InstallerEngine.IsAdministrator() ? "Administrador: SI" : "Ejecutar como Admin",
-                148,
-                30,
-                InstallerEngine.IsAdministrator() ? Color.FromArgb(30, 95, 62) : Color.FromArgb(62, 68, 86));
-            _btnAdmin.Enabled = !InstallerEngine.IsAdministrator();
-            _btnAdmin.Margin = new Padding(8, 0, 0, 0);
-            _btnAdmin.Click += BtnAdmin_Click;
+            _btnAdmin = CreateFlatButton("Admin: SI", 92, 30, Color.FromArgb(30, 95, 62));
+            _btnAdmin.Visible = false;
             pnlStatusBadges.Controls.Add(_btnAdmin);
 
             _btnInstallWinget = CreateFlatButton("Instalar Winget", 118, 30, _accentAmber);

@@ -292,18 +292,6 @@ function updateEnvHeader() {
     wgText.textContent = 'Sin Winget';
     btnWg.style.display = state.env.hasInternet ? 'inline-flex' : 'none';
   }
-
-  const btnAdmin = document.getElementById('btnAdmin');
-  const btnAdminText = document.getElementById('btnAdminText');
-  if (state.env.isAdmin) {
-    btnAdmin.className = 'btn-header admin-ok';
-    btnAdminText.textContent = 'Admin: SI';
-    btnAdmin.disabled = true;
-  } else {
-    btnAdmin.className = 'btn-header';
-    btnAdminText.textContent = 'Ejecutar como Admin';
-    btnAdmin.disabled = false;
-  }
 }
 
 function toggleThemeMenu() {
