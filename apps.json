@@ -672,9 +672,19 @@
       "Essential": false
     },
     {
+      "Id": "vcredist_aio",
+      "Name": "Visual C++ AIO (2005-2022)",
+      "Category": "Runtimes",
+      "Description": "Paquete todo-en-uno con todos los Visual C++ x64 y x86",
+      "Source": "winget",
+      "Target": "abbodi1406.vcredist",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
       "Id": "directx",
       "Name": "DirectX Runtime",
-      "Category": "Runtimes y Java",
+      "Category": "Runtimes",
       "Description": "Actualizador oficial DirectX End-User Runtime",
       "Source": "winget",
       "Target": "Microsoft.DirectX",
@@ -684,50 +694,280 @@
     {
       "Id": "vcredist",
       "Name": "Visual C++ 2015-2022 x64",
-      "Category": "Runtimes y Java",
-      "Description": "Librerias esenciales para apps y juegos",
+      "Category": "Runtimes",
+      "Description": "Librerias esenciales Visual C++ v14 (64-bit)",
       "Source": "winget",
       "Target": "Microsoft.VCRedist.2015+.x64",
       "SilentArgs": "",
       "Essential": true
     },
     {
+      "Id": "vcredist_x86",
+      "Name": "Visual C++ 2015-2022 x86",
+      "Category": "Runtimes",
+      "Description": "Librerias esenciales Visual C++ v14 (32-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2015+.x86",
+      "SilentArgs": "",
+      "Essential": true
+    },
+    {
+      "Id": "vcredist_2013_x64",
+      "Name": "Visual C++ 2013 x64",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2013 (64-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2013.x64",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2013_x86",
+      "Name": "Visual C++ 2013 x86",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2013 (32-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2013.x86",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2012_x64",
+      "Name": "Visual C++ 2012 x64",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2012 (64-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2012.x64",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2012_x86",
+      "Name": "Visual C++ 2012 x86",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2012 (32-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2012.x86",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2010_x64",
+      "Name": "Visual C++ 2010 x64",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2010 (64-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2010.x64",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2010_x86",
+      "Name": "Visual C++ 2010 x86",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2010 (32-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2010.x86",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2008_x64",
+      "Name": "Visual C++ 2008 x64",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2008 (64-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2008.x64",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2008_x86",
+      "Name": "Visual C++ 2008 x86",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2008 (32-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2008.x86",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2005_x64",
+      "Name": "Visual C++ 2005 x64",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2005 (64-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2005.x64",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "vcredist_2005_x86",
+      "Name": "Visual C++ 2005 x86",
+      "Category": "Runtimes",
+      "Description": "Redistributable Visual C++ 2005 (32-bit)",
+      "Source": "winget",
+      "Target": "Microsoft.VCRedist.2005.x86",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "xna4",
+      "Name": "XNA Framework 4.0",
+      "Category": "Runtimes",
+      "Description": "Runtime grafico Microsoft XNA para juegos clasicos",
+      "Source": "winget",
+      "Target": "Microsoft.XNARedist",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "openal",
+      "Name": "OpenAL Audio Runtime",
+      "Category": "Runtimes",
+      "Description": "Libreria de audio 3D requerida por varios juegos y apps",
+      "Source": "winget",
+      "Target": "CreativeTechnology.OpenAL",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "webview2",
+      "Name": "WebView2 Runtime",
+      "Category": "Runtimes",
+      "Description": "Runtime Microsoft Edge WebView2 para apps modernas",
+      "Source": "winget",
+      "Target": "Microsoft.EdgeWebView2Runtime",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "dotnet6",
+      "Name": ".NET Desktop Runtime 6",
+      "Category": "Runtimes",
+      "Description": "Runtime .NET 6 para aplicaciones de escritorio",
+      "Source": "winget",
+      "Target": "Microsoft.DotNet.DesktopRuntime.6",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "dotnet8",
-      "Name": ".NET Desktop Runtime 8",
-      "Category": "Runtimes y Java",
-      "Description": "Runtime para aplicaciones modernas .NET",
+      "Name": ".NET Desktop Runtime 8 LTS",
+      "Category": "Runtimes",
+      "Description": "Runtime .NET 8 LTS para aplicaciones modernas",
       "Source": "winget",
       "Target": "Microsoft.DotNet.DesktopRuntime.8",
       "SilentArgs": "",
       "Essential": false
     },
     {
+      "Id": "dotnet9",
+      "Name": ".NET Desktop Runtime 9",
+      "Category": "Runtimes",
+      "Description": "Runtime .NET 9 para aplicaciones de escritorio",
+      "Source": "winget",
+      "Target": "Microsoft.DotNet.DesktopRuntime.9",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "dotnet10",
+      "Name": ".NET Desktop Runtime 10 LTS",
+      "Category": "Runtimes",
+      "Description": "Runtime .NET 10 LTS para aplicaciones de escritorio",
+      "Source": "winget",
+      "Target": "Microsoft.DotNet.DesktopRuntime.10",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "dotnet11",
+      "Name": ".NET Desktop Runtime 11",
+      "Category": "Runtimes",
+      "Description": "Runtime .NET 11 mas reciente",
+      "Source": "winget",
+      "Target": "Microsoft.DotNet.DesktopRuntime.11",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "java8",
       "Name": "Java 8 (Oracle JRE)",
-      "Category": "Runtimes y Java",
-      "Description": "Java Runtime Environment 8 oficial",
+      "Category": "Java",
+      "Description": "Java Runtime Environment 8 oficial (apps clasicas y Minecraft)",
       "Source": "winget",
       "Target": "Oracle.JavaRuntimeEnvironment",
       "SilentArgs": "",
       "Essential": false
     },
     {
+      "Id": "java11_jre",
+      "Name": "Java 11 LTS (Temurin JRE)",
+      "Category": "Java",
+      "Description": "Eclipse Temurin JRE 11 LTS",
+      "Source": "winget",
+      "Target": "EclipseAdoptium.Temurin.11.JRE",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "java11_jdk",
+      "Name": "Java 11 LTS (Temurin JDK)",
+      "Category": "Java",
+      "Description": "Eclipse Temurin JDK 11 LTS para desarrollo",
+      "Source": "winget",
+      "Target": "EclipseAdoptium.Temurin.11.JDK",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "java17_jre",
+      "Name": "Java 17 LTS (Temurin JRE)",
+      "Category": "Java",
+      "Description": "Eclipse Temurin JRE 17 LTS",
+      "Source": "winget",
+      "Target": "EclipseAdoptium.Temurin.17.JRE",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "java17",
       "Name": "Java 17 LTS (Temurin JDK)",
-      "Category": "Runtimes y Java",
-      "Description": "Eclipse Temurin JDK 17 LTS",
+      "Category": "Java",
+      "Description": "Eclipse Temurin JDK 17 LTS para desarrollo",
       "Source": "winget",
       "Target": "EclipseAdoptium.Temurin.17.JDK",
       "SilentArgs": "",
       "Essential": false
     },
     {
+      "Id": "java21_jre",
+      "Name": "Java 21 LTS (Temurin JRE)",
+      "Category": "Java",
+      "Description": "Eclipse Temurin JRE 21 LTS",
+      "Source": "winget",
+      "Target": "EclipseAdoptium.Temurin.21.JRE",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "java21",
       "Name": "Java 21 LTS (Temurin JDK)",
-      "Category": "Runtimes y Java",
-      "Description": "Eclipse Temurin JDK 21 LTS",
+      "Category": "Java",
+      "Description": "Eclipse Temurin JDK 21 LTS para desarrollo",
       "Source": "winget",
       "Target": "EclipseAdoptium.Temurin.21.JDK",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "java25",
+      "Name": "Java 25 LTS (Oracle JDK)",
+      "Category": "Java",
+      "Description": "Oracle Java SE Development Kit 25 LTS",
+      "Source": "winget",
+      "Target": "Oracle.JDK.25",
       "SilentArgs": "",
       "Essential": false
     }

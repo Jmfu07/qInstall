@@ -330,13 +330,39 @@ namespace Qinstall
                 Make("steam", "Steam", "Juegos", "Plataforma principal de videojuegos PC", "winget", "Valve.Steam", false),
                 Make("epic", "Epic Games Launcher", "Juegos", "Tienda y lanzador de Epic Games", "winget", "EpicGames.EpicGamesLauncher", false),
 
-                // Runtimes y Java
-                Make("directx", "DirectX Runtime", "Runtimes y Java", "Actualizador oficial DirectX End-User Runtime", "winget", "Microsoft.DirectX", true),
-                Make("vcredist", "Visual C++ 2015-2022 x64", "Runtimes y Java", "Librerias esenciales para apps y juegos", "winget", "Microsoft.VCRedist.2015+.x64", true),
-                Make("dotnet8", ".NET Desktop Runtime 8", "Runtimes y Java", "Runtime para aplicaciones modernas .NET", "winget", "Microsoft.DotNet.DesktopRuntime.8", false),
-                Make("java8", "Java 8 (Oracle JRE)", "Runtimes y Java", "Java Runtime Environment 8 oficial", "winget", "Oracle.JavaRuntimeEnvironment", false),
-                Make("java17", "Java 17 LTS (Temurin JDK)", "Runtimes y Java", "Eclipse Temurin JDK 17 LTS", "winget", "EclipseAdoptium.Temurin.17.JDK", false),
-                Make("java21", "Java 21 LTS (Temurin JDK)", "Runtimes y Java", "Eclipse Temurin JDK 21 LTS", "winget", "EclipseAdoptium.Temurin.21.JDK", false)
+                // Runtimes
+                Make("vcredist_aio", "Visual C++ AIO (2005-2022)", "Runtimes", "Paquete todo-en-uno con todos los Visual C++ x64 y x86", "winget", "abbodi1406.vcredist", true),
+                Make("directx", "DirectX Runtime", "Runtimes", "Actualizador oficial DirectX End-User Runtime", "winget", "Microsoft.DirectX", true),
+                Make("vcredist", "Visual C++ 2015-2022 x64", "Runtimes", "Librerias esenciales Visual C++ v14 (64-bit)", "winget", "Microsoft.VCRedist.2015+.x64", true),
+                Make("vcredist_x86", "Visual C++ 2015-2022 x86", "Runtimes", "Librerias esenciales Visual C++ v14 (32-bit)", "winget", "Microsoft.VCRedist.2015+.x86", true),
+                Make("vcredist_2013_x64", "Visual C++ 2013 x64", "Runtimes", "Redistributable Visual C++ 2013 (64-bit)", "winget", "Microsoft.VCRedist.2013.x64", false),
+                Make("vcredist_2013_x86", "Visual C++ 2013 x86", "Runtimes", "Redistributable Visual C++ 2013 (32-bit)", "winget", "Microsoft.VCRedist.2013.x86", false),
+                Make("vcredist_2012_x64", "Visual C++ 2012 x64", "Runtimes", "Redistributable Visual C++ 2012 (64-bit)", "winget", "Microsoft.VCRedist.2012.x64", false),
+                Make("vcredist_2012_x86", "Visual C++ 2012 x86", "Runtimes", "Redistributable Visual C++ 2012 (32-bit)", "winget", "Microsoft.VCRedist.2012.x86", false),
+                Make("vcredist_2010_x64", "Visual C++ 2010 x64", "Runtimes", "Redistributable Visual C++ 2010 (64-bit)", "winget", "Microsoft.VCRedist.2010.x64", false),
+                Make("vcredist_2010_x86", "Visual C++ 2010 x86", "Runtimes", "Redistributable Visual C++ 2010 (32-bit)", "winget", "Microsoft.VCRedist.2010.x86", false),
+                Make("vcredist_2008_x64", "Visual C++ 2008 x64", "Runtimes", "Redistributable Visual C++ 2008 (64-bit)", "winget", "Microsoft.VCRedist.2008.x64", false),
+                Make("vcredist_2008_x86", "Visual C++ 2008 x86", "Runtimes", "Redistributable Visual C++ 2008 (32-bit)", "winget", "Microsoft.VCRedist.2008.x86", false),
+                Make("vcredist_2005_x64", "Visual C++ 2005 x64", "Runtimes", "Redistributable Visual C++ 2005 (64-bit)", "winget", "Microsoft.VCRedist.2005.x64", false),
+                Make("vcredist_2005_x86", "Visual C++ 2005 x86", "Runtimes", "Redistributable Visual C++ 2005 (32-bit)", "winget", "Microsoft.VCRedist.2005.x86", false),
+                Make("xna4", "XNA Framework 4.0", "Runtimes", "Runtime grafico Microsoft XNA para juegos clasicos", "winget", "Microsoft.XNARedist", false),
+                Make("openal", "OpenAL Audio Runtime", "Runtimes", "Libreria de audio 3D requerida por varios juegos y apps", "winget", "CreativeTechnology.OpenAL", false),
+                Make("webview2", "WebView2 Runtime", "Runtimes", "Runtime Microsoft Edge WebView2 para apps modernas", "winget", "Microsoft.EdgeWebView2Runtime", false),
+                Make("dotnet6", ".NET Desktop Runtime 6", "Runtimes", "Runtime .NET 6 para aplicaciones de escritorio", "winget", "Microsoft.DotNet.DesktopRuntime.6", false),
+                Make("dotnet8", ".NET Desktop Runtime 8 LTS", "Runtimes", "Runtime .NET 8 LTS para aplicaciones modernas", "winget", "Microsoft.DotNet.DesktopRuntime.8", false),
+                Make("dotnet9", ".NET Desktop Runtime 9", "Runtimes", "Runtime .NET 9 para aplicaciones de escritorio", "winget", "Microsoft.DotNet.DesktopRuntime.9", false),
+                Make("dotnet10", ".NET Desktop Runtime 10 LTS", "Runtimes", "Runtime .NET 10 LTS para aplicaciones de escritorio", "winget", "Microsoft.DotNet.DesktopRuntime.10", false),
+                Make("dotnet11", ".NET Desktop Runtime 11", "Runtimes", "Runtime .NET 11 mas reciente", "winget", "Microsoft.DotNet.DesktopRuntime.11", false),
+
+                // Java
+                Make("java8", "Java 8 (Oracle JRE)", "Java", "Java Runtime Environment 8 oficial (apps clasicas y Minecraft)", "winget", "Oracle.JavaRuntimeEnvironment", false),
+                Make("java11_jre", "Java 11 LTS (Temurin JRE)", "Java", "Eclipse Temurin JRE 11 LTS", "winget", "EclipseAdoptium.Temurin.11.JRE", false),
+                Make("java11_jdk", "Java 11 LTS (Temurin JDK)", "Java", "Eclipse Temurin JDK 11 LTS para desarrollo", "winget", "EclipseAdoptium.Temurin.11.JDK", false),
+                Make("java17_jre", "Java 17 LTS (Temurin JRE)", "Java", "Eclipse Temurin JRE 17 LTS", "winget", "EclipseAdoptium.Temurin.17.JRE", false),
+                Make("java17", "Java 17 LTS (Temurin JDK)", "Java", "Eclipse Temurin JDK 17 LTS para desarrollo", "winget", "EclipseAdoptium.Temurin.17.JDK", false),
+                Make("java21_jre", "Java 21 LTS (Temurin JRE)", "Java", "Eclipse Temurin JRE 21 LTS", "winget", "EclipseAdoptium.Temurin.21.JRE", false),
+                Make("java21", "Java 21 LTS (Temurin JDK)", "Java", "Eclipse Temurin JDK 21 LTS para desarrollo", "winget", "EclipseAdoptium.Temurin.21.JDK", false),
+                Make("java25", "Java 25 LTS (Oracle JDK)", "Java", "Oracle Java SE Development Kit 25 LTS", "winget", "Oracle.JDK.25", false)
             };
             return cat;
         }

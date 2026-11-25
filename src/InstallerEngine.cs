@@ -808,10 +808,33 @@ namespace Qinstall
             if (id == "steam") return installedNames.Contains("Steam");
             if (id == "epic") return AnyNameStartsWith(installedNames, "Epic Games Launcher");
             if (id == "vcredist") return AnyNameMatchesAll(installedNames, "Visual C++", "(x64)", "14.") || AnyNameMatchesAll(installedNames, "Visual C++", "2015-2022", "x64");
+            if (id == "vcredist_x86") return AnyNameMatchesAll(installedNames, "Visual C++", "(x86)", "14.") || AnyNameMatchesAll(installedNames, "Visual C++", "2015-2022", "x86");
+            if (id == "vcredist_2013_x64") return AnyNameMatchesAll(installedNames, "Visual C++", "2013", "x64");
+            if (id == "vcredist_2013_x86") return AnyNameMatchesAll(installedNames, "Visual C++", "2013", "x86");
+            if (id == "vcredist_2012_x64") return AnyNameMatchesAll(installedNames, "Visual C++", "2012", "x64");
+            if (id == "vcredist_2012_x86") return AnyNameMatchesAll(installedNames, "Visual C++", "2012", "x86");
+            if (id == "vcredist_2010_x64") return AnyNameMatchesAll(installedNames, "Visual C++", "2010", "x64");
+            if (id == "vcredist_2010_x86") return AnyNameMatchesAll(installedNames, "Visual C++", "2010", "x86");
+            if (id == "vcredist_2008_x64") return AnyNameMatchesAll(installedNames, "Visual C++", "2008", "x64");
+            if (id == "vcredist_2008_x86") return AnyNameMatchesAll(installedNames, "Visual C++", "2008", "x86");
+            if (id == "vcredist_2005_x64") return AnyNameMatchesAll(installedNames, "Visual C++", "2005", "x64");
+            if (id == "vcredist_2005_x86") return AnyNameMatchesAll(installedNames, "Visual C++", "2005", "x86");
+            if (id == "xna4") return AnyNameStartsWith(installedNames, "Microsoft XNA Framework");
+            if (id == "openal") return AnyNameEqualsOrPrefix(installedNames, "OpenAL");
+            if (id == "webview2") return AnyNameMatchesAll(installedNames, "WebView2", "Runtime", "Edge");
+            if (id == "dotnet6") return AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime - 6.") || AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime 6.");
             if (id == "dotnet8") return AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime - 8.") || AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime 8.");
+            if (id == "dotnet9") return AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime - 9.") || AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime 9.");
+            if (id == "dotnet10") return AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime - 10.") || AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime 10.");
+            if (id == "dotnet11") return AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime - 11.") || AnyNameStartsWith(installedNames, "Microsoft Windows Desktop Runtime 11.");
             if (id == "java8") return AnyNameStartsWith(installedNames, "Java 8");
+            if (id == "java11_jre") return AnyNameMatchesAll(installedNames, "Temurin", "11", "JRE");
+            if (id == "java11_jdk") return AnyNameMatchesAll(installedNames, "Temurin", "11", "JDK") || AnyNameStartsWith(installedNames, "Java(TM) SE Development Kit 11");
+            if (id == "java17_jre") return AnyNameMatchesAll(installedNames, "Temurin", "17", "JRE");
             if (id == "java17") return AnyNameMatchesAll(installedNames, "Temurin", "17", "JDK") || AnyNameStartsWith(installedNames, "Java(TM) SE Development Kit 17");
+            if (id == "java21_jre") return AnyNameMatchesAll(installedNames, "Temurin", "21", "JRE");
             if (id == "java21") return AnyNameMatchesAll(installedNames, "Temurin", "21", "JDK") || AnyNameStartsWith(installedNames, "Java(TM) SE Development Kit 21");
+            if (id == "java25") return AnyNameStartsWith(installedNames, "Java(TM) SE Development Kit 25") || AnyNameMatchesAll(installedNames, "Temurin", "25", "JDK");
 
             // Para apps personalizadas agregadas por el usuario
             if (!string.IsNullOrEmpty(name))

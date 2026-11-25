@@ -52,7 +52,9 @@ const CATEGORY_ICONS = {
   'ia y agentes': 'sparkles',
   'desarrollo': 'code-2',
   'juegos': 'gamepad-2',
+  'runtimes': 'cpu',
   'runtimes y java': 'cpu',
+  'java': 'coffee',
   'instaladores locales': 'folder-down',
   'resultados online (winget)': 'globe'
 };
