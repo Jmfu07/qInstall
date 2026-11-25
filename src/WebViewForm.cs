@@ -42,7 +42,7 @@ namespace Qinstall
             _json = new JavaScriptSerializer();
             _json.MaxJsonLength = 16 * 1024 * 1024;
 
-            this.Text = "qInstall — Gestor de Software por Lotes";
+            this.Text = "qInstall";
             this.Size = new Size(1280, 820);
             this.MinimumSize = new Size(860, 580);
             this.StartPosition = FormStartPosition.CenterScreen;
