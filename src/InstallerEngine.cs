@@ -798,6 +798,7 @@ namespace Qinstall
             if (id == "sumatrapdf") return AnyNameStartsWith(installedNames, "SumatraPDF");
             if (id == "adobereader") return AnyNameStartsWith(installedNames, "Adobe Acrobat") || AnyNameStartsWith(installedNames, "Adobe Reader");
             if (id == "obsidian") return AnyNameEqualsOrPrefix(installedNames, "Obsidian");
+            if (id == "google_drive") return AnyNameStartsWith(installedNames, "Google Drive");
             if (id == "chatgpt") return AnyNameEqualsOrPrefix(installedNames, "ChatGPT");
             if (id == "claude") return AnyNameEqualsOrPrefix(installedNames, "Claude") && !AnyExactPrefixOnly(installedNames, "Claude Code", "Claude Science");
             if (id == "claude_code") return AnyNameStartsWith(installedNames, "Claude Code");

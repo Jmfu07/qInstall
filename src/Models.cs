@@ -310,6 +310,7 @@ namespace Qinstall
                 Make("sumatrapdf", "SumatraPDF", "Oficina", "Lector de PDF ultra rapido", "winget", "SumatraPDF.SumatraPDF", true),
                 Make("adobereader", "Adobe Acrobat Reader", "Oficina", "Lector oficial de documentos PDF", "winget", "Adobe.Acrobat.Reader.64-bit", false),
                 Make("obsidian", "Obsidian", "Oficina", "Notas personales en Markdown", "winget", "Obsidian.Obsidian", false),
+                Make("google_drive", "Google Drive", "Oficina", "Sincronizacion y unidad en la nube oficial de Google Drive", "winget", "Google.GoogleDrive", false),
 
                 // IA y Agentes
                 Make("chatgpt", "ChatGPT", "IA y Agentes", "Aplicacion oficial de escritorio de OpenAI ChatGPT", "winget", "OpenAI.ChatGPT", false),

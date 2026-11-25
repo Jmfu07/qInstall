@@ -542,6 +542,16 @@
       "Essential": false
     },
     {
+      "Id": "google_drive",
+      "Name": "Google Drive",
+      "Category": "Oficina",
+      "Description": "Sincronizacion y unidad en la nube oficial de Google Drive",
+      "Source": "winget",
+      "Target": "Google.GoogleDrive",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "chatgpt",
       "Name": "ChatGPT",
       "Category": "IA y Agentes",
