@@ -299,6 +299,22 @@ if (window.chrome && window.chrome.webview) {
       case 'localInstallerSaved':
         handleLocalInstallerSaved(msg);
         break;
+      case 'networkUpdate': {
+        const wasOnline = !!state.env.hasInternet;
+        state.env.hasInternet = !!msg.hasInternet;
+        state.env.networkLabel = msg.networkLabel || '';
+        updateEnvHeader();
+        renderActiveView();
+        if (wasOnline !== state.env.hasInternet) {
+          if (state.env.hasInternet) {
+            const via = state.env.networkLabel ? ` (${state.env.networkLabel})` : '';
+            showToast(`Conexión detectada automáticamente${via}.`, 'success');
+          } else {
+            showToast('Se perdió la conexión — Modo Offline activado automáticamente.', 'warn');
+          }
+        }
+        break;
+      }
       case 'summary':
         setBusyState(false, 'idle');
         showSummaryModal(msg.title, msg.headline, msg.items || [], !!msg.hasFailures);
@@ -406,10 +422,11 @@ function updateEnvHeader() {
   const netIcon = document.getElementById('netBadgeIcon');
   const diagNet = document.getElementById('diagNetVal');
   if (state.env.hasInternet) {
+    const netLabel = state.env.networkLabel ? state.env.networkLabel : 'Internet: Conectado';
     netBadge.className = 'env-badge icon-pill';
-    netBadge.title = 'Internet: Conectado (OK)';
-    if (netIcon) netIcon.setAttribute('data-lucide', 'wifi');
-    if (diagNet) diagNet.textContent = 'Conectado (OK)';
+    netBadge.title = `${netLabel} (OK)`;
+    if (netIcon) netIcon.setAttribute('data-lucide', netLabel.toLowerCase().includes('ethernet') ? 'globe' : 'wifi');
+    if (diagNet) diagNet.textContent = state.env.networkLabel ? state.env.networkLabel : 'Conectado (OK)';
   } else {
     netBadge.className = 'env-badge icon-pill offline';
     netBadge.title = 'Sin Internet (Modo Offline)';

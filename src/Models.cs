@@ -318,6 +318,16 @@ namespace Qinstall
                 Make("sharex", "ShareX", "Multimedia", "Capturas de pantalla y GIFs avanzados", "winget", "ShareX.ShareX", false),
                 Make("gimp", "GIMP", "Multimedia", "Editor de imagenes gratuito", "winget", "GIMP.GIMP.3", false),
                 Make("paintnet", "Paint.NET", "Multimedia", "Editor de imagenes rapido y ligero", "winget", "dotPDN.PaintDotNet", false),
+                Make("handbrake", "HandBrake", "Multimedia", "Conversor y compresor de video open-source (MP4, MKV, H.264/H.265/AV1)", "winget", "HandBrake.HandBrake", false),
+                Make("kdenlive", "Kdenlive", "Multimedia", "Editor de video multipista profesional gratuito (alternativa a Premiere Pro)", "winget", "KDE.Kdenlive", false),
+                Make("shotcut", "Shotcut", "Multimedia", "Editor de video ligero, rapido y open-source", "winget", "Meltytech.Shotcut", false),
+                Make("capcut", "CapCut", "Multimedia", "Editor de video moderno con plantillas, subtitulos automaticos y efectos", "winget", "ByteDance.CapCut", false),
+                Make("adobe_cc", "Adobe Creative Cloud", "Multimedia", "Gestor oficial de Adobe (Photoshop, Premiere, Illustrator, After Effects)", "winget", "Adobe.CreativeCloud", false),
+                Make("inkscape", "Inkscape", "Multimedia", "Diseno vectorial SVG gratuito (alternativa libre a Adobe Illustrator)", "winget", "Inkscape.Inkscape", false),
+                Make("krita", "Krita", "Multimedia", "Ilustracion digital y edicion avanzada gratuita (alternativa libre a Photoshop)", "winget", "KDE.Krita", false),
+                Make("blender", "Blender", "Multimedia", "Suite profesional 3D, animacion, VFX y edicion de video open-source", "winget", "BlenderFoundation.Blender", false),
+                Make("darktable", "Darktable", "Multimedia", "Revelado fotografico RAW gratuito (alternativa libre a Adobe Lightroom)", "winget", "darktable.darktable", false),
+                Make("scribus", "Scribus", "Multimedia", "Maquetacion editorial gratuita (alternativa libre a Adobe InDesign)", "winget", "Scribus.Scribus", false),
 
                 // Comunicacion
                 Make("discord", "Discord", "Comunicacion", "Chat de voz, video y comunidades", "winget", "Discord.Discord", false),
@@ -335,6 +345,7 @@ namespace Qinstall
                 Make("adobereader", "Adobe Acrobat Reader", "Oficina", "Lector oficial de documentos PDF", "winget", "Adobe.Acrobat.Reader.64-bit", false),
                 Make("obsidian", "Obsidian", "Oficina", "Notas personales en Markdown", "winget", "Obsidian.Obsidian", false),
                 Make("google_drive", "Google Drive", "Oficina", "Sincronizacion y unidad en la nube oficial de Google Drive", "winget", "Google.GoogleDrive", false),
+                Make("pdfgear", "PDFgear", "Oficina", "Editor, conversor y firmador de PDF gratuito (alternativa a Acrobat Pro)", "winget", "PDFgear.PDFgear", false),
 
                 // IA y Agentes
                 Make("chatgpt", "ChatGPT", "IA y Agentes", "Aplicacion oficial de escritorio de OpenAI ChatGPT", "winget", "OpenAI.ChatGPT", false),
@@ -359,6 +370,8 @@ namespace Qinstall
                 Make("jan_ai", "Jan AI", "IA y Agentes", "Chat de IA local de codigo abierto 100% privado", "winget", "Jan.Jan", false),
                 Make("cherry_studio", "Cherry Studio", "IA y Agentes", "Cliente multi-IA (ChatGPT, Gemini, Claude, DeepSeek, Ollama)", "winget", "kangfenmao.CherryStudio", false),
                 Make("comfyui", "ComfyUI Desktop", "IA y Agentes", "Generacion local de imagenes y video con IA por nodos", "winget", "Comfy.ComfyUI-Desktop", false),
+                Make("grammarly", "Grammarly for Windows", "IA y Agentes", "Asistente de escritura, correccion y redaccion con IA para Windows", "winget", "Grammarly.Grammarly", false),
+                Make("otter_ai", "Otter.ai (Escritorio / Web)", "IA y Agentes", "Transcripcion y resumenes automaticos de reuniones con IA (descarga oficial)", "powershell", "Write-Host '=== Otter.ai para Windows ===' -ForegroundColor Cyan; Write-Host 'Abriendo pagina oficial de descarga de Otter.ai para Windows...' -ForegroundColor Green; Start-Process 'https://otter.ai/apps'; Read-Host 'Descarga el instalador oficial desde tu navegador. Presiona Enter para cerrar'", false),
 
                 // IDEs y JetBrains
                 Make("jetbrains_toolbox", "JetBrains Toolbox", "IDEs y JetBrains", "Gestor oficial para instalar y actualizar todos los IDEs de JetBrains", "winget", "JetBrains.Toolbox", false),

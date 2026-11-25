@@ -592,6 +592,106 @@
       "Essential": false
     },
     {
+      "Id": "handbrake",
+      "Name": "HandBrake",
+      "Category": "Multimedia",
+      "Description": "Conversor y compresor de video open-source (MP4, MKV, H.264/H.265/AV1)",
+      "Source": "winget",
+      "Target": "HandBrake.HandBrake",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "kdenlive",
+      "Name": "Kdenlive",
+      "Category": "Multimedia",
+      "Description": "Editor de video multipista profesional gratuito (alternativa a Premiere Pro)",
+      "Source": "winget",
+      "Target": "KDE.Kdenlive",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "shotcut",
+      "Name": "Shotcut",
+      "Category": "Multimedia",
+      "Description": "Editor de video ligero, rapido y open-source",
+      "Source": "winget",
+      "Target": "Meltytech.Shotcut",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "capcut",
+      "Name": "CapCut",
+      "Category": "Multimedia",
+      "Description": "Editor de video moderno con plantillas, subtitulos automaticos y efectos",
+      "Source": "winget",
+      "Target": "ByteDance.CapCut",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "adobe_cc",
+      "Name": "Adobe Creative Cloud",
+      "Category": "Multimedia",
+      "Description": "Gestor oficial de Adobe (Photoshop, Premiere, Illustrator, After Effects)",
+      "Source": "winget",
+      "Target": "Adobe.CreativeCloud",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "inkscape",
+      "Name": "Inkscape",
+      "Category": "Multimedia",
+      "Description": "Diseno vectorial SVG gratuito (alternativa libre a Adobe Illustrator)",
+      "Source": "winget",
+      "Target": "Inkscape.Inkscape",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "krita",
+      "Name": "Krita",
+      "Category": "Multimedia",
+      "Description": "Ilustracion digital y edicion avanzada gratuita (alternativa libre a Photoshop)",
+      "Source": "winget",
+      "Target": "KDE.Krita",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "blender",
+      "Name": "Blender",
+      "Category": "Multimedia",
+      "Description": "Suite profesional 3D, animacion, VFX y edicion de video open-source",
+      "Source": "winget",
+      "Target": "BlenderFoundation.Blender",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "darktable",
+      "Name": "Darktable",
+      "Category": "Multimedia",
+      "Description": "Revelado fotografico RAW gratuito (alternativa libre a Adobe Lightroom)",
+      "Source": "winget",
+      "Target": "darktable.darktable",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "scribus",
+      "Name": "Scribus",
+      "Category": "Multimedia",
+      "Description": "Maquetacion editorial gratuita (alternativa libre a Adobe InDesign)",
+      "Source": "winget",
+      "Target": "Scribus.Scribus",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "discord",
       "Name": "Discord",
       "Category": "Comunicacion",
@@ -718,6 +818,16 @@
       "Description": "Sincronizacion y unidad en la nube oficial de Google Drive",
       "Source": "winget",
       "Target": "Google.GoogleDrive",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "pdfgear",
+      "Name": "PDFgear",
+      "Category": "Oficina",
+      "Description": "Editor, conversor y firmador de PDF gratuito (alternativa a Acrobat Pro)",
+      "Source": "winget",
+      "Target": "PDFgear.PDFgear",
       "SilentArgs": "",
       "Essential": false
     },
@@ -938,6 +1048,26 @@
       "Description": "Generacion local de imagenes y video con IA por nodos",
       "Source": "winget",
       "Target": "Comfy.ComfyUI-Desktop",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "grammarly",
+      "Name": "Grammarly for Windows",
+      "Category": "IA y Agentes",
+      "Description": "Asistente de escritura, correccion y redaccion con IA para Windows",
+      "Source": "winget",
+      "Target": "Grammarly.Grammarly",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "otter_ai",
+      "Name": "Otter.ai (Escritorio / Web)",
+      "Category": "IA y Agentes",
+      "Description": "Transcripcion y resumenes automaticos de reuniones con IA (descarga oficial)",
+      "Source": "powershell",
+      "Target": "Write-Host '=== Otter.ai para Windows ===' -ForegroundColor Cyan; Write-Host 'Abriendo pagina oficial de descarga de Otter.ai para Windows...' -ForegroundColor Green; Start-Process 'https://otter.ai/apps'; Read-Host 'Descarga el instalador oficial desde tu navegador. Presiona Enter para cerrar'",
       "SilentArgs": "",
       "Essential": false
     },

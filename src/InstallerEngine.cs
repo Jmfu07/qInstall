@@ -147,6 +147,84 @@ namespace Qinstall
             });
         }
 
+        public static string GetActiveNetworkSummary()
+        {
+            bool hasWifi = false;
+            bool hasEthernet = false;
+            try
+            {
+                NetworkInterface[] nics = NetworkInterface.GetAllNetworkInterfaces();
+                for (int i = 0; i < nics.Length; i++)
+                {
+                    NetworkInterface nic = nics[i];
+                    if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                    if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                        nic.NetworkInterfaceType == NetworkInterfaceType.Tunnel) continue;
+                    string desc = (nic.Description ?? string.Empty).ToLowerInvariant();
+                    if (desc.Contains("virtual") || desc.Contains("vpn") || desc.Contains("hyper-v") || desc.Contains("vmware") || desc.Contains("virtualbox")) continue;
+
+                    if (nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+                    {
+                        hasWifi = true;
+                    }
+                    else if (nic.NetworkInterfaceType == NetworkInterfaceType.Ethernet ||
+                             nic.NetworkInterfaceType == NetworkInterfaceType.GigabitEthernet)
+                    {
+                        hasEthernet = true;
+                    }
+                }
+            }
+            catch { }
+
+            if (hasWifi)
+            {
+                string ssid = ReadActiveWifiSsid();
+                if (!string.IsNullOrEmpty(ssid)) return "Wi-Fi: " + ssid;
+                return hasEthernet ? "Ethernet + Wi-Fi" : "Wi-Fi";
+            }
+            if (hasEthernet) return "Ethernet";
+            return string.Empty;
+        }
+
+        private static string ReadActiveWifiSsid()
+        {
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo("netsh", "wlan show interfaces");
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.CreateNoWindow = true;
+                using (Process p = Process.Start(psi))
+                {
+                    if (p == null) return string.Empty;
+                    string output = p.StandardOutput.ReadToEnd();
+                    if (!p.WaitForExit(1500))
+                    {
+                        try { p.Kill(); } catch { }
+                        return string.Empty;
+                    }
+                    string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string trimmed = lines[i].Trim();
+                        if (trimmed.StartsWith("SSID", StringComparison.OrdinalIgnoreCase) &&
+                            !trimmed.StartsWith("BSSID", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int colon = trimmed.IndexOf(':');
+                            if (colon >= 0)
+                            {
+                                string val = trimmed.Substring(colon + 1).Trim();
+                                if (!string.IsNullOrEmpty(val)) return val;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return string.Empty;
+        }
+
         public static bool AppRequiresInternet(AppItem app)
         {
             if (app == null) return false;
@@ -203,6 +281,8 @@ namespace Qinstall
                 return "Solo instalación online: instalador pesado (> 700 MB) restringido en pendrive";
             if (id == "comfyui" || id == "lmstudio")
                 return "Solo instalación online: suite de IA pesada (> 1 GB) restringida en pendrive";
+            if (id == "adobe_cc")
+                return "Solo instalación online: Adobe Creative Cloud descarga sus suites desde la nube";
             if (id == "intellij" || id == "intellij_community" ||
                 id == "pycharm" || id == "pycharm_community" ||
                 id == "webstorm" || id == "clion" || id == "rider" ||
@@ -1004,6 +1084,16 @@ namespace Qinstall
             if (id == "sharex") return AnyNameEqualsOrPrefix(installedNames, "ShareX");
             if (id == "gimp") return AnyNameEqualsOrPrefix(installedNames, "GIMP");
             if (id == "paintnet") return AnyNameEqualsOrPrefix(installedNames, "paint.net");
+            if (id == "handbrake") return AnyNameStartsWith(installedNames, "HandBrake");
+            if (id == "kdenlive") return AnyNameStartsWith(installedNames, "Kdenlive");
+            if (id == "shotcut") return AnyNameEqualsOrPrefix(installedNames, "Shotcut");
+            if (id == "capcut") return AnyNameEqualsOrPrefix(installedNames, "CapCut");
+            if (id == "adobe_cc") return AnyNameStartsWith(installedNames, "Adobe Creative Cloud");
+            if (id == "inkscape") return AnyNameEqualsOrPrefix(installedNames, "Inkscape");
+            if (id == "krita") return AnyNameEqualsOrPrefix(installedNames, "Krita");
+            if (id == "blender") return AnyNameEqualsOrPrefix(installedNames, "Blender");
+            if (id == "darktable") return AnyNameEqualsOrPrefix(installedNames, "darktable");
+            if (id == "scribus") return AnyNameStartsWith(installedNames, "Scribus");
             if (id == "discord") return AnyNameEqualsOrPrefix(installedNames, "Discord") || AnyIdContains(installedIds, "XPDC2RH70K22MN");
             if (id == "whatsapp") return AnyNameEqualsOrPrefix(installedNames, "WhatsApp") || AnyIdContains(installedIds, "5319275A.WhatsAppDesktop") || AnyIdContains(installedIds, "9NKSQGP7F2NH");
             if (id == "telegram") return AnyNameStartsWith(installedNames, "Telegram Desktop");
@@ -1013,7 +1103,9 @@ namespace Qinstall
             if (id == "adobereader") return AnyNameStartsWith(installedNames, "Adobe Acrobat") || AnyNameStartsWith(installedNames, "Adobe Reader");
             if (id == "obsidian") return AnyNameEqualsOrPrefix(installedNames, "Obsidian");
             if (id == "google_drive") return AnyNameStartsWith(installedNames, "Google Drive");
+            if (id == "pdfgear") return AnyNameEqualsOrPrefix(installedNames, "PDFgear");
             if (id == "chatgpt") return AnyNameEqualsOrPrefix(installedNames, "ChatGPT");
+            if (id == "grammarly") return AnyNameStartsWith(installedNames, "Grammarly");
             if (id == "claude") return HasBaseAppExcluding(installedNames, "Claude", "Claude Code", "Claude Science");
             if (id == "claude_code") return AnyNameStartsWith(installedNames, "Claude Code");
             if (id == "cursor") return AnyNameEqualsOrPrefix(installedNames, "Cursor");

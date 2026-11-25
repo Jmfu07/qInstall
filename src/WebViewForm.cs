@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -29,6 +30,9 @@ namespace Qinstall
         private readonly HashSet<string> _installedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, OfflineCacheUpdateInfo> _outdatedCaches = new Dictionary<string, OfflineCacheUpdateInfo>(StringComparer.OrdinalIgnoreCase);
         private bool _hasInternet = true;
+        private string _networkLabel = string.Empty;
+        private Timer _netDebounceTimer;
+        private bool _netEventsWired;
         private bool _wingetAvailable;
         private string _wingetVersion = string.Empty;
         private bool _isBusy;
@@ -57,12 +61,28 @@ namespace Qinstall
 
             this.Load += WebViewForm_Load;
             this.FormClosing += WebViewForm_FormClosing;
+
+            _netDebounceTimer = new Timer();
+            _netDebounceTimer.Interval = 1800;
+            _netDebounceTimer.Tick += NetDebounceTimer_Tick;
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                if (_netEventsWired)
+                {
+                    NetworkChange.NetworkAvailabilityChanged -= OnSystemNetworkChanged;
+                    NetworkChange.NetworkAddressChanged -= OnSystemNetworkChanged;
+                    _netEventsWired = false;
+                }
+                if (_netDebounceTimer != null)
+                {
+                    _netDebounceTimer.Stop();
+                    _netDebounceTimer.Dispose();
+                    _netDebounceTimer = null;
+                }
                 if (_engine != null)
                 {
                     _engine.LogMessage -= OnEngineLog;
@@ -74,6 +94,50 @@ namespace Qinstall
                 }
             }
             base.Dispose(disposing);
+        }
+
+        private void OnSystemNetworkChanged(object sender, EventArgs e)
+        {
+            if (this.IsDisposed || !this.IsHandleCreated) return;
+            try
+            {
+                this.BeginInvoke(new Action(delegate
+                {
+                    if (_netDebounceTimer != null && !this.IsDisposed)
+                    {
+                        _netDebounceTimer.Stop();
+                        _netDebounceTimer.Start();
+                    }
+                }));
+            }
+            catch { }
+        }
+
+        private async void NetDebounceTimer_Tick(object sender, EventArgs e)
+        {
+            if (_netDebounceTimer != null) _netDebounceTimer.Stop();
+            if (this.IsDisposed) return;
+
+            bool onlineNow = await InstallerEngine.CheckInternetAsync();
+            string labelNow = onlineNow ? await Task.Run(delegate { return InstallerEngine.GetActiveNetworkSummary(); }) : string.Empty;
+            if (this.IsDisposed) return;
+
+            if (onlineNow != _hasInternet || !string.Equals(labelNow, _networkLabel, StringComparison.OrdinalIgnoreCase))
+            {
+                _hasInternet = onlineNow;
+                _networkLabel = labelNow ?? string.Empty;
+                PostMessage(new Dictionary<string, object>
+                {
+                    { "type", "networkUpdate" },
+                    { "hasInternet", _hasInternet },
+                    { "networkLabel", _networkLabel }
+                });
+                PostLog(
+                    _hasInternet
+                        ? ("[*] Conexion detectada automaticamente: " + (string.IsNullOrEmpty(_networkLabel) ? "Internet OK" : _networkLabel))
+                        : "[!] Se perdio la conexion a Internet — cambiando automaticamente a modo offline.",
+                    _hasInternet ? "success" : "warn");
+            }
         }
 
         private void ApplyNativeTitlebarTheme(bool dark)
@@ -107,6 +171,12 @@ namespace Qinstall
         private async void WebViewForm_Load(object sender, EventArgs e)
         {
             ApplyNativeTitlebarTheme(true);
+            if (!_netEventsWired)
+            {
+                NetworkChange.NetworkAvailabilityChanged += OnSystemNetworkChanged;
+                NetworkChange.NetworkAddressChanged += OnSystemNetworkChanged;
+                _netEventsWired = true;
+            }
             try
             {
                 string userDataDir = Path.Combine(Path.GetTempPath(), "QinstallWebView2");
@@ -271,6 +341,7 @@ namespace Qinstall
             Task<string> wingetTask = Task.Run(delegate { return InstallerEngine.GetWingetVersion(); });
 
             _hasInternet = await netTask;
+            _networkLabel = _hasInternet ? await Task.Run(delegate { return InstallerEngine.GetActiveNetworkSummary(); }) : string.Empty;
             string ver = await wingetTask;
             _wingetAvailable = !string.IsNullOrEmpty(ver);
             _wingetVersion = ver ?? string.Empty;
@@ -350,6 +421,7 @@ namespace Qinstall
                 Task<bool> netTask = InstallerEngine.CheckInternetAsync();
                 Task<string> wingetTask = Task.Run(delegate { return InstallerEngine.GetWingetVersion(); });
                 _hasInternet = await netTask;
+                _networkLabel = _hasInternet ? await Task.Run(delegate { return InstallerEngine.GetActiveNetworkSummary(); }) : string.Empty;
                 string ver = await wingetTask;
                 _wingetAvailable = !string.IsNullOrEmpty(ver);
                 _wingetVersion = ver ?? string.Empty;
@@ -1770,6 +1842,7 @@ namespace Qinstall
                 { "env", new Dictionary<string, object>
                     {
                         { "hasInternet", _hasInternet },
+                        { "networkLabel", _networkLabel ?? string.Empty },
                         { "wingetAvailable", _wingetAvailable },
                         { "wingetVersion", _wingetVersion },
                         { "isAdmin", InstallerEngine.IsAdministrator() },
