@@ -322,14 +322,14 @@
             <span>Ver Registro</span>
           </button>
 
-          <button class="btn-offline-dl" id="btnDownloadOffline" onclick="startOfflineDownload()">
+          <button class="btn-offline-dl" id="btnDownloadOffline" onclick="startOfflineDownload()" title="Solo guarda los instaladores en tu pendrive (local\cache\) sin instalarlos, para usarlos luego en PCs sin Internet">
             <i data-lucide="hard-drive-download" style="width: 16px; height: 16px;"></i>
             <span>Descargar offline</span>
           </button>
 
-          <button class="btn-install" id="btnInstall" onclick="startOrCancelInstall()">
-            <i data-lucide="download-cloud" style="width: 17px; height: 17px;"></i>
-            <span id="btnInstallLabel">Instalar seleccionadas</span>
+          <button class="btn-install" id="btnInstall" onclick="startOrCancelInstall()" title="Instala en esta PC las apps seleccionadas: usa primero tus instaladores guardados sin Internet (DESCARGADO/LOCAL) y solo usa Internet si alguna no está descargada">
+            <i data-lucide="monitor-down" style="width: 17px; height: 17px;"></i>
+            <span id="btnInstallLabel">Instalar en esta PC</span>
           </button>
         </div>
       </div>

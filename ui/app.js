@@ -868,6 +868,39 @@ function updateCounter() {
   if (hdrChk) {
     hdrChk.checked = visible.length > 0 && visible.every(a => state.selectedKeys.has(a.key));
   }
+  updateInstallButtonLabel();
+}
+
+function updateInstallButtonLabel() {
+  if (state.isBusy) return;
+  const lbl = document.getElementById('btnInstallLabel');
+  const btn = document.getElementById('btnInstall');
+  if (!lbl || !btn) return;
+
+  const apps = getSelectedAppsInfo();
+  if (apps.length === 0) {
+    lbl.textContent = 'Instalar en esta PC';
+    btn.title = 'Instala en esta PC las apps seleccionadas: usa primero tus instaladores guardados sin Internet (DESCARGADO/LOCAL) y solo usa Internet si alguna no está descargada';
+    return;
+  }
+
+  let offlineCount = 0;
+  let onlineCount = 0;
+  for (const a of apps) {
+    if (a.hasOffline && !a.requiresInternet) offlineCount++;
+    else onlineCount++;
+  }
+
+  if (offlineCount > 0 && onlineCount === 0) {
+    lbl.textContent = `Instalar offline (${offlineCount})`;
+    btn.title = `Todas las seleccionadas (${offlineCount}) ya están guardadas en tu pendrive: se instalarán 100% sin Internet.`;
+  } else if (offlineCount > 0 && onlineCount > 0) {
+    lbl.textContent = `Instalar (${offlineCount} offline + ${onlineCount} online)`;
+    btn.title = `${offlineCount} se instalarán offline desde tu pendrive y ${onlineCount} desde Internet.`;
+  } else {
+    lbl.textContent = `Instalar en esta PC (${onlineCount})`;
+    btn.title = `Instalará ${onlineCount} ${onlineCount === 1 ? 'aplicación' : 'aplicaciones'} en esta PC usando Internet (o usa "Descargar offline" primero para guardarlas en el pendrive).`;
+  }
 }
 
 function switchView(mode, persist = true) {
@@ -1049,14 +1082,25 @@ function startOrCancelInstall() {
 
   const silent = document.getElementById('chkSilent').checked;
   const upgrade = document.getElementById('chkUpgrade').checked;
+  let offlineCount = 0;
+  let onlineCount = 0;
   const rows = apps.map(a => {
-    const modeTag = a.hasOffline && !a.requiresInternet ? 'DESCARGADO' : (a.source === 'powershell' ? 'TOOL' : 'ONLINE');
+    const isOff = a.hasOffline && !a.requiresInternet;
+    if (isOff) offlineCount++;
+    else onlineCount++;
+    const modeTag = isOff ? 'OFFLINE · PENDRIVE' : (a.source === 'powershell' ? 'TOOL' : 'ONLINE');
     return `<div class="dialog-row-ok">• ${escapeHtml(a.name)} <span style="opacity:0.65;">[${modeTag}]</span></div>`;
   }).join('');
 
+  const modeSummary = offlineCount > 0 && onlineCount === 0
+    ? `<span style="color:var(--cta-green); font-weight:600;">⚡ Instalación 100% offline desde tu pendrive (no requiere Internet).</span>`
+    : (offlineCount > 0 && onlineCount > 0
+      ? `<span style="color:var(--primary); font-weight:600;">⚡ ${offlineCount} offline desde tu pendrive · ${onlineCount} desde Internet.</span>`
+      : `<span style="color:var(--text-muted);">Instalación desde Internet (si quieres llevarlas sin Internet, usa primero "Descargar offline").</span>`);
+
   openDialogModal(
     'Confirmar instalación',
-    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>instalar ${apps.length} ${apps.length === 1 ? 'aplicación' : 'aplicaciones'}</b> en este equipo?<br><span style="font-size:11.5px; color:var(--text-muted);">Instalación silenciosa: <b>${silent ? 'Sí' : 'No'}</b> · Actualizar si ya existe: <b>${upgrade ? 'Sí' : 'No'}</b></span></p><div class="dialog-list">${rows}</div>`,
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>instalar ${apps.length} ${apps.length === 1 ? 'aplicación' : 'aplicaciones'}</b> en este equipo?<br>${modeSummary}<br><span style="font-size:11.5px; color:var(--text-muted);">Instalación silenciosa: <b>${silent ? 'Sí' : 'No'}</b> · Actualizar si ya existe: <b>${upgrade ? 'Sí' : 'No'}</b></span></p><div class="dialog-list">${rows}</div>`,
     `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
      <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedInstall()">Sí, instalar ahora (${apps.length})</button>`
   );
@@ -1298,7 +1342,7 @@ function setBusyState(busy, mode) {
     ensureFooterProgressLoop();
   } else {
     btnInstall.classList.remove('cancel-mode');
-    lbl.textContent = 'Instalar seleccionadas';
+    updateInstallButtonLabel();
     btnDl.style.display = 'inline-flex';
   }
 }
