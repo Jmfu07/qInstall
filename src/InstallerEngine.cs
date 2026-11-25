@@ -152,7 +152,8 @@ namespace Qinstall
             {
                 string cmd = app.Target ?? string.Empty;
                 return cmd.IndexOf("http://", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                       cmd.IndexOf("https://", StringComparison.OrdinalIgnoreCase) >= 0;
+                       cmd.IndexOf("https://", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       cmd.IndexOf("wsreset", StringComparison.OrdinalIgnoreCase) >= 0;
             }
             if (src == "local")
             {
@@ -456,10 +457,14 @@ namespace Qinstall
                     Directory.CreateDirectory(cacheDir);
                     ClearDirectoryFiles(cacheDir);
 
+                    string pkgSource = GetWingetSourceName(app.Target);
+                    string extraMsStore = pkgSource == "msstore" ? " --skip-microsoft-store-package-license" : string.Empty;
                     string args = string.Format(
-                        "download --id \"{0}\" --exact --source winget -d \"{1}\" --accept-package-agreements --accept-source-agreements --skip-dependencies --disable-interactivity",
+                        "download --id \"{0}\" --exact --source {1} -d \"{2}\" --accept-package-agreements --accept-source-agreements --skip-dependencies{3} --disable-interactivity",
                         app.Target.Trim(),
-                        cacheDir);
+                        pkgSource,
+                        cacheDir,
+                        extraMsStore);
 
                     StringBuilder output = new StringBuilder();
                     int code = await RunProcessAsync("winget", args, output);
@@ -785,6 +790,7 @@ namespace Qinstall
             if (id == "gimp") return AnyNameEqualsOrPrefix(installedNames, "GIMP");
             if (id == "paintnet") return AnyNameEqualsOrPrefix(installedNames, "paint.net");
             if (id == "discord") return AnyNameEqualsOrPrefix(installedNames, "Discord") || AnyIdContains(installedIds, "XPDC2RH70K22MN");
+            if (id == "whatsapp") return AnyNameEqualsOrPrefix(installedNames, "WhatsApp") || AnyIdContains(installedIds, "5319275A.WhatsAppDesktop") || AnyIdContains(installedIds, "9NKSQGP7F2NH");
             if (id == "telegram") return AnyNameStartsWith(installedNames, "Telegram Desktop");
             if (id == "zoom") return AnyNameEqualsOrPrefix(installedNames, "Zoom");
             if (id == "libreoffice") return AnyNameStartsWith(installedNames, "LibreOffice");
@@ -1194,6 +1200,13 @@ namespace Qinstall
             }
         }
 
+        private static string GetWingetSourceName(string targetId)
+        {
+            string t = (targetId ?? string.Empty).Trim();
+            // Los paquetes de Microsoft Store (ej. 9NKSQGP7F2NH) no contienen punto
+            return (t.Length > 0 && t.IndexOf('.') < 0) ? "msstore" : "winget";
+        }
+
         private async Task<InstallResult> InstallViaWingetAsync(AppItem app, bool silent, bool upgradeIfExists)
         {
             if (string.IsNullOrWhiteSpace(app.Target))
@@ -1201,10 +1214,12 @@ namespace Qinstall
                 return MakeResult(app, InstallStatus.Failed, "ID de Winget vacio");
             }
 
+            string pkgSource = GetWingetSourceName(app.Target);
             string silentFlag = silent ? " --silent" : string.Empty;
             string args = string.Format(
-                "install --id \"{0}\" --exact --source winget{1} --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                "install --id \"{0}\" --exact --source {1}{2} --accept-package-agreements --accept-source-agreements --disable-interactivity",
                 app.Target.Trim(),
+                pkgSource,
                 silentFlag);
 
             StringBuilder output = new StringBuilder();
@@ -1242,8 +1257,9 @@ namespace Qinstall
                 {
                     EmitLog("[*] Ya estaba instalado. Comprobando actualizaciones para " + app.Name + "...");
                     string upArgs = string.Format(
-                        "upgrade --id \"{0}\" --exact --source winget{1} --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                        "upgrade --id \"{0}\" --exact --source {1}{2} --accept-package-agreements --accept-source-agreements --disable-interactivity",
                         app.Target.Trim(),
+                        pkgSource,
                         silentFlag);
                     StringBuilder upOutput = new StringBuilder();
                     int upCode = await RunProcessAsync("winget", upArgs, upOutput);

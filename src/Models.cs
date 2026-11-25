@@ -261,6 +261,7 @@ namespace Qinstall
                 Make("cpuz", "CPU-Z", "Utilidades", "Informacion detallada del hardware", "winget", "CPUID.CPU-Z", false),
                 Make("treesize", "TreeSize Free", "Utilidades", "Analiza el espacio ocupado en disco", "winget", "JAMSoftware.TreeSize.Free", false),
                 Make("wiztree", "WizTree", "Utilidades", "Analizador ultra rapido de espacio en disco", "winget", "AntibodySoftware.WizTree", false),
+                Make("msstore_install", "Microsoft Store (Instalar/Reparar)", "Utilidades", "Instala o restaura la tienda oficial Microsoft Store (wsreset -i)", "powershell", "Write-Host '=== Instalando / Reparando Microsoft Store ===' -ForegroundColor Cyan; wsreset -i; Get-AppxPackage -AllUsers Microsoft.WindowsStore | ForEach-Object { Add-AppxPackage -DisableDevelopmentMode -Register ($_.InstallLocation + '\\AppXManifest.xml') -ErrorAction SilentlyContinue }; Write-Host 'Solicitud enviada a Windows. Microsoft Store aparecera en unos momentos.' -ForegroundColor Green; Read-Host 'Presiona Enter para cerrar'", false),
 
                 // Optimizacion
                 Make("winutil", "Windows Utility (Chris Titus)", "Optimizacion", "Herramienta interactiva WinUtil para optimizar y limpiar Windows", "powershell", "irm 'https://christitus.com/win' | iex", false),
@@ -295,6 +296,7 @@ namespace Qinstall
 
                 // Comunicacion
                 Make("discord", "Discord", "Comunicacion", "Chat de voz, video y comunidades", "winget", "Discord.Discord", false),
+                Make("whatsapp", "WhatsApp", "Comunicacion", "Aplicacion oficial de WhatsApp (Microsoft Store)", "winget", "9NKSQGP7F2NH", false),
                 Make("telegram", "Telegram Desktop", "Comunicacion", "Mensajeria rapida en la nube", "winget", "Telegram.TelegramDesktop", false),
                 Make("zoom", "Zoom Workplace", "Comunicacion", "Videollamadas y reuniones online", "winget", "Zoom.Zoom", false),
 

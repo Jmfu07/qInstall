@@ -152,6 +152,16 @@
       "Essential": false
     },
     {
+      "Id": "msstore_install",
+      "Name": "Microsoft Store (Instalar/Reparar)",
+      "Category": "Utilidades",
+      "Description": "Instala o restaura la tienda oficial Microsoft Store (wsreset -i)",
+      "Source": "powershell",
+      "Target": "Write-Host '=== Instalando / Reparando Microsoft Store ===' -ForegroundColor Cyan; wsreset -i; Get-AppxPackage -AllUsers Microsoft.WindowsStore | ForEach-Object { Add-AppxPackage -DisableDevelopmentMode -Register ($_.InstallLocation + '\\AppXManifest.xml') -ErrorAction SilentlyContinue }; Write-Host 'Solicitud enviada a Windows. Microsoft Store aparecera en unos momentos.' -ForegroundColor Green; Read-Host 'Presiona Enter para cerrar'",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "winutil",
       "Name": "Windows Utility (Chris Titus)",
       "Category": "Optimizacion",
@@ -408,6 +418,16 @@
       "Description": "Chat de voz, video y comunidades",
       "Source": "winget",
       "Target": "Discord.Discord",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "whatsapp",
+      "Name": "WhatsApp",
+      "Category": "Comunicacion",
+      "Description": "Aplicacion oficial de WhatsApp (Microsoft Store)",
+      "Source": "winget",
+      "Target": "9NKSQGP7F2NH",
       "SilentArgs": "",
       "Essential": false
     },
