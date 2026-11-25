@@ -33,6 +33,7 @@ namespace Qinstall
     {
         private readonly object _lock = new object();
         private readonly List<Process> _activeProcesses = new List<Process>();
+        private readonly List<HttpWebRequest> _activeRequests = new List<HttpWebRequest>();
         private WebClient _currentWebClient;
         private volatile bool _cancelRequested;
 
@@ -844,7 +845,12 @@ namespace Qinstall
             return string.Empty;
         }
 
-        public async Task<InstallResult> DownloadForOfflineAsync(AppItem app)
+        public Task<InstallResult> DownloadForOfflineAsync(AppItem app)
+        {
+            return DownloadForOfflineAsync(app, null);
+        }
+
+        public async Task<InstallResult> DownloadForOfflineAsync(AppItem app, Action<int> onProgress)
         {
             if (_cancelRequested)
             {
@@ -871,10 +877,10 @@ namespace Qinstall
 
                     string pkgSource = GetWingetSourceName(app.Target);
 
-                    // Via rapida: obtener Installer Url + SHA256 con winget show y descargar en 4 conexiones paralelas (3x-5x mas rapido)
+                    // Via rapida: obtener Installer Url + SHA256 con winget show y descargar en 4 conexiones paralelas
                     if (pkgSource == "winget")
                     {
-                        string fastFile = await TryFastDirectWingetDownloadAsync(app, cacheDir);
+                        string fastFile = await TryFastDirectWingetDownloadAsync(app, cacheDir, onProgress);
                         if (_cancelRequested)
                         {
                             ClearDirectoryFiles(cacheDir);
@@ -938,7 +944,7 @@ namespace Qinstall
 
                     string safeId = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id);
                     string destFile = Path.Combine(cacheDir, safeId + ext);
-                    bool ok = await DownloadFileAsync(app.Target.Trim(), destFile);
+                    bool ok = await DownloadFileAsync(app.Target.Trim(), destFile, onProgress);
                     if (_cancelRequested)
                     {
                         TryDeleteFile(destFile);
@@ -1047,6 +1053,10 @@ namespace Qinstall
                 if (_currentWebClient != null)
                 {
                     try { _currentWebClient.CancelAsync(); } catch { }
+                }
+                for (int i = 0; i < _activeRequests.Count; i++)
+                {
+                    try { _activeRequests[i].Abort(); } catch { }
                 }
                 for (int i = 0; i < _activeProcesses.Count; i++)
                 {
@@ -2063,7 +2073,7 @@ namespace Qinstall
             return MakeResult(app, InstallStatus.Failed, "Codigo de salida: " + exitCode);
         }
 
-        private async Task<string> TryFastDirectWingetDownloadAsync(AppItem app, string cacheDir)
+        private async Task<string> TryFastDirectWingetDownloadAsync(AppItem app, string cacheDir, Action<int> onProgress)
         {
             try
             {
@@ -2147,8 +2157,8 @@ namespace Qinstall
                 string safeName = SanitizeFileName(string.IsNullOrWhiteSpace(app.Id) ? app.Name : app.Id) + ext;
                 string destFile = Path.Combine(cacheDir, safeName);
 
-                EmitLog("[*] Descarga turbo (4 conexiones): " + installerUrl);
-                bool ok = await DownloadFileAsync(installerUrl, destFile);
+                EmitLog("[*] Descarga turbo (" + app.Name + "): " + installerUrl);
+                bool ok = await DownloadFileAsync(installerUrl, destFile, onProgress);
                 if (!ok || _cancelRequested || !File.Exists(destFile))
                 {
                     TryDeleteFile(destFile);
@@ -2160,7 +2170,7 @@ namespace Qinstall
                     string actualHash = ComputeFileSha256(destFile);
                     if (!string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
                     {
-                        EmitLog("[!] Hash SHA256 no coincide en descarga directa; usando respaldo winget download...");
+                        EmitLog("[!] Hash SHA256 no coincide en descarga directa (" + app.Name + "); usando respaldo winget download...");
                         TryDeleteFile(destFile);
                         return null;
                     }
@@ -2209,7 +2219,35 @@ namespace Qinstall
             }
         }
 
+        private void RegisterRequest(HttpWebRequest req)
+        {
+            if (req == null) return;
+            lock (_lock) { _activeRequests.Add(req); }
+        }
+
+        private void UnregisterRequest(HttpWebRequest req)
+        {
+            if (req == null) return;
+            lock (_lock) { _activeRequests.Remove(req); }
+        }
+
+        private void ReportDownloadPct(int pct, Action<int> onProgress)
+        {
+            if (onProgress != null)
+            {
+                onProgress(pct);
+                return;
+            }
+            Action<int> handler = DownloadProgress;
+            if (handler != null) handler(pct);
+        }
+
         private Task<bool> DownloadFileAsync(string url, string destinationPath)
+        {
+            return DownloadFileAsync(url, destinationPath, null);
+        }
+
+        private Task<bool> DownloadFileAsync(string url, string destinationPath, Action<int> onProgress)
         {
             return Task.Run(delegate
             {
@@ -2223,31 +2261,50 @@ namespace Qinstall
                     long totalLength = -1;
                     bool supportsRanges = false;
                     string resolvedUrl = url;
+                    HttpWebRequest headReq = null;
                     try
                     {
-                        HttpWebRequest headReq = (HttpWebRequest)WebRequest.Create(url);
+                        headReq = (HttpWebRequest)WebRequest.Create(url);
                         headReq.Method = "HEAD";
                         headReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Qinstall/1.0";
                         headReq.AllowAutoRedirect = true;
-                        headReq.Timeout = 7000;
+                        headReq.AutomaticDecompression = DecompressionMethods.None;
+                        headReq.Timeout = 8000;
+                        RegisterRequest(headReq);
                         using (HttpWebResponse headResp = (HttpWebResponse)headReq.GetResponse())
                         {
                             totalLength = headResp.ContentLength;
                             resolvedUrl = headResp.ResponseUri != null ? headResp.ResponseUri.AbsoluteUri : url;
                             string ar = headResp.Headers["Accept-Ranges"] ?? string.Empty;
-                            supportsRanges = ar.IndexOf("bytes", StringComparison.OrdinalIgnoreCase) >= 0 && totalLength >= (4L * 1024L * 1024L);
+                            supportsRanges = ar.IndexOf("bytes", StringComparison.OrdinalIgnoreCase) >= 0 && totalLength >= (8L * 1024L * 1024L);
                         }
                     }
                     catch
                     {
                         supportsRanges = false;
                     }
+                    finally
+                    {
+                        UnregisterRequest(headReq);
+                    }
 
                     if (_cancelRequested) return false;
 
-                    bool ok = supportsRanges
-                        ? DownloadSegmented(resolvedUrl, stageFile, totalLength, 4)
-                        : DownloadSingleStream(resolvedUrl, stageFile, totalLength);
+                    bool ok = false;
+                    if (supportsRanges)
+                    {
+                        ok = DownloadSegmented(resolvedUrl, stageFile, totalLength, 4, onProgress);
+                        if (!ok && !_cancelRequested)
+                        {
+                            // Si el servidor ignoro Range (200 OK) o fallo un segmento, reintentar limpio en 1 flujo directo
+                            TryDeleteFile(stageFile);
+                            ok = DownloadSingleStream(resolvedUrl, stageFile, totalLength, onProgress);
+                        }
+                    }
+                    else
+                    {
+                        ok = DownloadSingleStream(resolvedUrl, stageFile, totalLength, onProgress);
+                    }
 
                     if (!ok || _cancelRequested || !File.Exists(stageFile))
                     {
@@ -2259,23 +2316,25 @@ namespace Qinstall
                     if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
                     File.Copy(stageFile, destinationPath, true);
                     TryDeleteFile(stageFile);
-                    EmitLog("[OK] Descarga finalizada.");
+                    ReportDownloadPct(100, onProgress);
                     return true;
                 }
                 catch (Exception ex)
                 {
                     TryDeleteFile(stageFile);
-                    EmitLog("[X] Error de descarga: " + ex.Message);
+                    if (!_cancelRequested) EmitLog("[X] Error de descarga: " + ex.Message);
                     return false;
                 }
             });
         }
 
-        private bool DownloadSegmented(string url, string stageFile, long totalLength, int parts)
+        private bool DownloadSegmented(string url, string stageFile, long totalLength, int parts, Action<int> onProgress)
         {
+            List<HttpWebRequest> localReqs = new List<HttpWebRequest>();
+            object localLock = new object();
+            int localAborted = 0;
             try
             {
-                // Pre-asignar tamano del archivo en disco local (%TEMP%) para escrituras contiguas rapidas
                 using (FileStream fs = new FileStream(stageFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
                 {
                     fs.SetLength(totalLength);
@@ -2284,56 +2343,93 @@ namespace Qinstall
                 long downloaded = 0;
                 int lastPct = -1;
                 long chunkSize = totalLength / parts;
-                bool anyFailed = false;
                 Task[] workers = new Task[parts];
+
+                Action abortSiblings = delegate
+                {
+                    Interlocked.Exchange(ref localAborted, 1);
+                    lock (localLock)
+                    {
+                        for (int k = 0; k < localReqs.Count; k++)
+                        {
+                            try { localReqs[k].Abort(); } catch { }
+                        }
+                    }
+                };
 
                 for (int p = 0; p < parts; p++)
                 {
                     long start = p * chunkSize;
                     long end = (p == parts - 1) ? (totalLength - 1) : (start + chunkSize - 1);
+                    long expectedLen = (end - start) + 1;
                     workers[p] = Task.Run(delegate
                     {
+                        HttpWebRequest req = null;
                         try
                         {
-                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                            if (_cancelRequested || Thread.VolatileRead(ref localAborted) != 0) return;
+                            req = (HttpWebRequest)WebRequest.Create(url);
                             req.Method = "GET";
                             req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Qinstall/1.0";
                             req.AllowAutoRedirect = true;
-                            req.Timeout = 15000;
-                            req.ReadWriteTimeout = 20000;
+                            req.AutomaticDecompression = DecompressionMethods.None;
+                            req.Timeout = 20000;
+                            req.ReadWriteTimeout = 45000;
                             req.AddRange(start, end);
 
+                            RegisterRequest(req);
+                            lock (localLock) { localReqs.Add(req); }
+
                             using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                            using (Stream netStream = resp.GetResponseStream())
-                            using (FileStream fs = new FileStream(stageFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 131072))
                             {
-                                fs.Seek(start, SeekOrigin.Begin);
-                                byte[] buffer = new byte[131072];
-                                int read;
-                                while (!_cancelRequested && (read = netStream.Read(buffer, 0, buffer.Length)) > 0)
+                                // CRITICO: Si el servidor devolvio 200 OK en lugar de 206 Partial Content, abortar y usar 1 flujo
+                                if (resp.StatusCode != HttpStatusCode.PartialContent)
                                 {
-                                    fs.Write(buffer, 0, read);
-                                    long nowTotal = Interlocked.Add(ref downloaded, read);
-                                    int pct = (int)Math.Min(100, (nowTotal * 100L) / totalLength);
-                                    if (pct != lastPct)
+                                    abortSiblings();
+                                    return;
+                                }
+
+                                using (Stream netStream = resp.GetResponseStream())
+                                using (FileStream fs = new FileStream(stageFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 262144))
+                                {
+                                    fs.Seek(start, SeekOrigin.Begin);
+                                    byte[] buffer = new byte[262144];
+                                    long chunkRead = 0;
+                                    int read;
+                                    while (!_cancelRequested && Thread.VolatileRead(ref localAborted) == 0 && chunkRead < expectedLen &&
+                                           (read = netStream.Read(buffer, 0, (int)Math.Min(buffer.Length, expectedLen - chunkRead))) > 0)
                                     {
-                                        lastPct = pct;
-                                        Action<int> handler = DownloadProgress;
-                                        if (handler != null) handler(pct);
+                                        fs.Write(buffer, 0, read);
+                                        chunkRead += read;
+                                        long nowTotal = Interlocked.Add(ref downloaded, read);
+                                        int pct = (int)Math.Min(99, (nowTotal * 100L) / totalLength);
+                                        if (pct != lastPct)
+                                        {
+                                            lastPct = pct;
+                                            ReportDownloadPct(pct, onProgress);
+                                        }
+                                    }
+                                    if (chunkRead != expectedLen && !_cancelRequested)
+                                    {
+                                        abortSiblings();
                                     }
                                 }
                             }
                         }
                         catch
                         {
-                            anyFailed = true;
+                            if (!_cancelRequested) abortSiblings();
+                        }
+                        finally
+                        {
+                            UnregisterRequest(req);
                         }
                     });
                 }
 
                 Task.WaitAll(workers);
-                if (anyFailed || _cancelRequested) return false;
-                return downloaded >= totalLength;
+                if (Thread.VolatileRead(ref localAborted) != 0 || _cancelRequested) return false;
+                return downloaded == totalLength;
             }
             catch
             {
@@ -2341,41 +2437,58 @@ namespace Qinstall
             }
         }
 
-        private bool DownloadSingleStream(string url, string stageFile, long knownLength)
+        private bool DownloadSingleStream(string url, string stageFile, long knownLength, Action<int> onProgress)
         {
-            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-            req.Method = "GET";
-            req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Qinstall/1.0";
-            req.AllowAutoRedirect = true;
-            req.Timeout = 15000;
-            req.ReadWriteTimeout = 20000;
-
-            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-            using (Stream netStream = resp.GetResponseStream())
-            using (FileStream fs = new FileStream(stageFile, FileMode.Create, FileAccess.Write, FileShare.None, 131072))
+            HttpWebRequest req = null;
+            try
             {
-                long total = resp.ContentLength > 0 ? resp.ContentLength : knownLength;
-                long downloaded = 0;
-                int lastPct = -1;
-                byte[] buffer = new byte[131072];
-                int read;
-                while (!_cancelRequested && (read = netStream.Read(buffer, 0, buffer.Length)) > 0)
+                req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Qinstall/1.0";
+                req.AllowAutoRedirect = true;
+                req.AutomaticDecompression = DecompressionMethods.None;
+                req.Timeout = 20000;
+                req.ReadWriteTimeout = 45000;
+                RegisterRequest(req);
+
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (Stream netStream = resp.GetResponseStream())
+                using (FileStream fs = new FileStream(stageFile, FileMode.Create, FileAccess.Write, FileShare.None, 262144))
                 {
-                    fs.Write(buffer, 0, read);
-                    downloaded += read;
-                    if (total > 0)
+                    long total = resp.ContentLength > 0 ? resp.ContentLength : knownLength;
+                    long downloaded = 0;
+                    int lastPct = -1;
+                    byte[] buffer = new byte[262144];
+                    int read;
+                    while (!_cancelRequested && (read = netStream.Read(buffer, 0, buffer.Length)) > 0)
                     {
-                        int pct = (int)Math.Min(100, (downloaded * 100L) / total);
-                        if (pct != lastPct)
+                        fs.Write(buffer, 0, read);
+                        downloaded += read;
+                        if (total > 0)
                         {
-                            lastPct = pct;
-                            Action<int> handler = DownloadProgress;
-                            if (handler != null) handler(pct);
+                            int pct = (int)Math.Min(99, (downloaded * 100L) / total);
+                            if (pct != lastPct)
+                            {
+                                lastPct = pct;
+                                ReportDownloadPct(pct, onProgress);
+                            }
                         }
                     }
+                    if (!_cancelRequested && total > 0 && downloaded < total)
+                    {
+                        return false;
+                    }
                 }
+                return !_cancelRequested;
             }
-            return !_cancelRequested;
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                UnregisterRequest(req);
+            }
         }
 
         private Task<int> RunProcessAsync(string fileName, string arguments, StringBuilder outputBuffer, bool logOutput = true, bool allowShellElevateFallback = false)

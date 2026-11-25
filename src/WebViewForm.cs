@@ -1255,42 +1255,89 @@ namespace Qinstall
             _isBusy = true;
             _engine.ResetCancellation();
             List<InstallResult> results = new List<InstallResult>();
+            Dictionary<string, int> activePcts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string> activeNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             object resLock = new object();
             int completed = 0;
+            int lastReportedPct = 1;
             int total = downloadable.Count;
+
+            Action emitBatchProgress = delegate
+            {
+                int overallPct;
+                string statusText;
+                lock (resLock)
+                {
+                    double partialSum = 0;
+                    foreach (KeyValuePair<string, int> kv in activePcts)
+                    {
+                        partialSum += Math.Max(0, Math.Min(100, kv.Value)) / 100.0;
+                    }
+                    double ratio = total > 0 ? (completed + partialSum) / total : 1.0;
+                    overallPct = (int)Math.Round(ratio * 100.0);
+                    if (completed < total) overallPct = Math.Max(1, Math.Min(99, overallPct));
+                    else overallPct = 100;
+
+                    if (overallPct < lastReportedPct) overallPct = lastReportedPct;
+                    lastReportedPct = overallPct;
+
+                    List<string> curNames = new List<string>(activeNames.Values);
+                    string runningLabel = curNames.Count > 0 ? string.Join(", ", curNames.ToArray()) : "Finalizando...";
+                    statusText = string.Format("Descargando ({0}/{1}): {2}", completed, total, runningLabel);
+                }
+                PostProgress(true, "download", overallPct, statusText);
+            };
 
             try
             {
-                PostProgress(true, "download", 2, string.Format("Descarga turbo en paralelo (0/{0})...", total));
-                using (SemaphoreSlim sem = new SemaphoreSlim(3, 3))
+                PostProgress(true, "download", 1, string.Format("Iniciando descarga turbo (0/{0})...", total));
+                using (SemaphoreSlim sem = new SemaphoreSlim(2, 2))
                 {
                     List<Task> tasks = new List<Task>();
                     for (int i = 0; i < total; i++)
                     {
                         AppItem app = downloadable[i];
+                        string appKey = GetAppKey(app);
                         tasks.Add(Task.Run(async delegate
                         {
                             await sem.WaitAsync();
                             try
                             {
-                                InstallResult res = await _engine.DownloadForOfflineAsync(app);
-                                int nowDone;
                                 lock (resLock)
                                 {
+                                    activePcts[appKey] = 0;
+                                    activeNames[appKey] = app.Name;
+                                }
+                                emitBatchProgress();
+
+                                int lastAppPct = -1;
+                                InstallResult res = await _engine.DownloadForOfflineAsync(app, delegate(int pct)
+                                {
+                                    if (pct == lastAppPct) return;
+                                    if (lastAppPct >= 0 && Math.Abs(pct - lastAppPct) < 4 && pct < 100) return;
+                                    lastAppPct = pct;
+                                    lock (resLock) { activePcts[appKey] = pct; }
+                                    emitBatchProgress();
+                                });
+
+                                lock (resLock)
+                                {
+                                    activePcts.Remove(appKey);
+                                    activeNames.Remove(appKey);
                                     results.Add(res);
                                     completed++;
-                                    nowDone = completed;
+                                    if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                                    {
+                                        _outdatedCaches.Remove(appKey);
+                                    }
                                 }
 
                                 if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
                                 {
-                                    string key = GetAppKey(app);
-                                    _outdatedCaches.Remove(key);
-                                    PostAppUpdated(app, _installedKeys.Contains(key), true, false, true);
+                                    PostAppUpdated(app, _installedKeys.Contains(appKey), true, false, true);
                                 }
 
-                                int donePct = (int)Math.Round(((double)nowDone / total) * 100.0);
-                                PostProgress(true, "download", donePct, string.Format("Descargadas ({0}/{1}): {2}", nowDone, total, app.Name));
+                                emitBatchProgress();
                             }
                             finally
                             {

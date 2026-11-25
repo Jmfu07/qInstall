@@ -259,8 +259,14 @@ if (window.chrome && window.chrome.webview) {
         break;
       case 'downloadPct':
         if (state.isBusy) {
-          const curText = document.getElementById('statusMessageText').textContent.replace(/\s*\(\d+%\)$/, '');
-          setStatusText(`${curText} (${msg.pct}%)`, msg.pct);
+          const curEl = document.getElementById('statusMessageText');
+          const curText = (curEl ? curEl.textContent : '').replace(/\s*\(\d+%\)$/, '');
+          const batchMatch = curText.match(/\((\d+)\s*\/\s*(\d+)\)/);
+          if (batchMatch && parseInt(batchMatch[2], 10) > 1) {
+            if (curEl) curEl.textContent = `${curText} (${msg.pct}%)`;
+          } else {
+            setStatusText(`${curText} (${msg.pct}%)`, msg.pct);
+          }
         }
         break;
       case 'appUpdated':
