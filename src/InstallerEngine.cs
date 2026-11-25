@@ -21,6 +21,13 @@ namespace Qinstall
         public string Version { get; set; }
     }
 
+    public class OfflineCacheUpdateInfo
+    {
+        public AppItem App { get; set; }
+        public string LocalVersion { get; set; }
+        public string LatestVersion { get; set; }
+    }
+
     public class InstallerEngine
     {
         private readonly object _lock = new object();
@@ -259,6 +266,148 @@ namespace Qinstall
                 catch { }
             }
             return null;
+        }
+
+        public static string GetCachedOfflineVersion(AppItem app)
+        {
+            string installerPath = FindCachedInstallerPath(app);
+            if (string.IsNullOrEmpty(installerPath)) return string.Empty;
+
+            // 1. Leer PackageVersion del manifiesto .yaml guardado por winget download
+            try
+            {
+                string dir = Path.GetDirectoryName(installerPath);
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                {
+                    string[] yamls = Directory.GetFiles(dir, "*.yaml");
+                    for (int i = 0; i < yamls.Length; i++)
+                    {
+                        string[] lines = File.ReadAllLines(yamls[i], Encoding.UTF8);
+                        for (int l = 0; l < lines.Length; l++)
+                        {
+                            string trimmed = lines[l].Trim();
+                            if (trimmed.StartsWith("PackageVersion:", StringComparison.OrdinalIgnoreCase))
+                            {
+                                string val = trimmed.Substring(15).Trim().Trim('\'', '"');
+                                if (!string.IsNullOrEmpty(val)) return val;
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            // 2. Respaldo: FileVersionInfo del binario .exe/.msi
+            try
+            {
+                FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(installerPath);
+                if (!string.IsNullOrWhiteSpace(fvi.ProductVersion)) return fvi.ProductVersion.Trim();
+                if (!string.IsNullOrWhiteSpace(fvi.FileVersion)) return fvi.FileVersion.Trim();
+            }
+            catch
+            {
+            }
+
+            return string.Empty;
+        }
+
+        public async Task<string> GetWingetLatestVersionAsync(string packageId)
+        {
+            if (string.IsNullOrWhiteSpace(packageId)) return string.Empty;
+            string safeId = packageId.Replace("\"", string.Empty).Trim();
+            string args = string.Format(
+                "show --id \"{0}\" --exact --source winget --accept-source-agreements --disable-interactivity",
+                safeId);
+
+            string output = await RunQuickQueryAsync("winget", args, 8000);
+            if (string.IsNullOrEmpty(output)) return string.Empty;
+
+            string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.StartsWith("Version:", StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("Versi", StringComparison.OrdinalIgnoreCase))
+                {
+                    int colon = line.IndexOf(':');
+                    if (colon >= 0)
+                    {
+                        string v = line.Substring(colon + 1).Trim();
+                        if (!string.IsNullOrEmpty(v)) return v;
+                    }
+                }
+            }
+            return string.Empty;
+        }
+
+        public static bool IsVersionOlder(string localVersion, string latestVersion)
+        {
+            if (string.IsNullOrWhiteSpace(localVersion) || string.IsNullOrWhiteSpace(latestVersion))
+            {
+                return false;
+            }
+
+            string a = localVersion.Trim();
+            string b = latestVersion.Trim();
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return false;
+
+            string[] partsA = a.Split(new[] { '.', '-', '_', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] partsB = b.Split(new[] { '.', '-', '_', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            int max = Math.Max(partsA.Length, partsB.Length);
+
+            for (int i = 0; i < max; i++)
+            {
+                string pa = i < partsA.Length ? partsA[i] : "0";
+                string pb = i < partsB.Length ? partsB[i] : "0";
+
+                long na;
+                long nb;
+                if (long.TryParse(pa, out na) && long.TryParse(pb, out nb))
+                {
+                    if (na < nb) return true;
+                    if (na > nb) return false;
+                }
+                else
+                {
+                    int cmp = string.Compare(pa, pb, StringComparison.OrdinalIgnoreCase);
+                    if (cmp < 0) return true;
+                    if (cmp > 0) return false;
+                }
+            }
+
+            return false;
+        }
+
+        public async Task<Dictionary<string, OfflineCacheUpdateInfo>> CheckOutdatedOfflineCachesAsync(List<AppItem> apps)
+        {
+            Dictionary<string, OfflineCacheUpdateInfo> outdated = new Dictionary<string, OfflineCacheUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+            if (apps == null || apps.Count == 0) return outdated;
+
+            for (int i = 0; i < apps.Count; i++)
+            {
+                AppItem app = apps[i];
+                string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+                if (src != "winget" || string.IsNullOrWhiteSpace(app.Target)) continue;
+                if (!HasOfflineCache(app)) continue;
+
+                string localVer = GetCachedOfflineVersion(app);
+                if (string.IsNullOrEmpty(localVer)) continue;
+
+                string latestVer = await GetWingetLatestVersionAsync(app.Target);
+                if (IsVersionOlder(localVer, latestVer))
+                {
+                    string key = (app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty);
+                    OfflineCacheUpdateInfo info = new OfflineCacheUpdateInfo();
+                    info.App = app;
+                    info.LocalVersion = localVer;
+                    info.LatestVersion = latestVer;
+                    outdated[key] = info;
+                }
+            }
+
+            return outdated;
         }
 
         private static string ExtractSilentArgsFromCachedYaml(string installerPath)

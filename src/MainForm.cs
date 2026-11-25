@@ -31,6 +31,7 @@ namespace Qinstall
         private readonly List<AppItem> _currentOnlineResults = new List<AppItem>();
         private readonly List<AppItem> _autoDiscoveredLocalApps = new List<AppItem>();
         private readonly HashSet<string> _installedApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, OfflineCacheUpdateInfo> _outdatedOfflineCaches = new Dictionary<string, OfflineCacheUpdateInfo>(StringComparer.OrdinalIgnoreCase);
         private readonly Timer _searchDebounceTimer;
         private int _onlineSearchSeq;
         private bool _isSearchingOnline;
@@ -370,6 +371,68 @@ namespace Qinstall
 
             RenderCategories(_txtSearch != null ? _txtSearch.Text : string.Empty);
             RefreshInstalledAppsAsync();
+
+            if (online && _wingetAvailable)
+            {
+                CheckOutdatedOfflineCachesAsync(true);
+            }
+        }
+
+        private async void CheckOutdatedOfflineCachesAsync(bool promptUser)
+        {
+            if (_catalog == null || _catalog.Apps == null) return;
+            Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(GetAllCatalogApps());
+            if (this.IsDisposed) return;
+
+            _outdatedOfflineCaches.Clear();
+            List<AppItem> toReplace = new List<AppItem>();
+            StringBuilder sb = new StringBuilder();
+
+            foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
+            {
+                _outdatedOfflineCaches[kv.Key] = kv.Value;
+                toReplace.Add(kv.Value.App);
+                sb.AppendLine(string.Format(" - {0}: tienes v{1}  ->  nueva v{2}", kv.Value.App.Name, kv.Value.LocalVersion, kv.Value.LatestVersion));
+
+                Label tagLbl;
+                if (_appTagLabels.TryGetValue(kv.Key, out tagLbl))
+                {
+                    ApplyTagStyle(tagLbl, kv.Value.App, _installedApps.Contains(kv.Key));
+                }
+                CheckBox cb;
+                if (_appCheckboxes.TryGetValue(kv.Key, out cb))
+                {
+                    _toolTip.SetToolTip(
+                        cb,
+                        string.Format("INSTALADOR LOCAL DESACTUALIZADO: tienes v{0} y existe v{1}.\nDebes reemplazarlo antes de usarlo.", kv.Value.LocalVersion, kv.Value.LatestVersion));
+                }
+            }
+
+            if (toReplace.Count > 0)
+            {
+                AppendLog("[!] Se detectaron " + toReplace.Count + " instaladores locales desactualizados en local\\cache\\.");
+                if (!_isInstalling)
+                {
+                    _lblStatus.Text = string.Format("Atencion: {0} instalador(es) local(es) desactualizado(s). Debes reemplazarlos.", toReplace.Count);
+                }
+
+                if (promptUser && !_isInstalling)
+                {
+                    DialogResult ans = MessageBox.Show(
+                        this,
+                        "Se detectaron instaladores locales desactualizados en tu pendrive:\n\n" +
+                        sb.ToString() +
+                        "\nDebes reemplazarlos por la ultima version antes de usarlos.\n¿Quieres descargar y reemplazar estos instaladores ahora mismo?",
+                        "Actualizacion obligatoria de instaladores locales — Qinstall",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (ans == DialogResult.Yes)
+                    {
+                        await RunOfflineDownloadBatchAsync(toReplace);
+                    }
+                }
+            }
         }
 
         private void UpdateInternetBadge(bool online)
@@ -814,6 +877,15 @@ namespace Qinstall
 
             bool needsNet = InstallerEngine.AppRequiresInternet(app);
             bool hasOffline = InstallerEngine.HasOfflineCache(app);
+            string key = GetAppKey(app);
+
+            if (_outdatedOfflineCaches.ContainsKey(key))
+            {
+                lblTag.Text = "ACTUALIZAR";
+                lblTag.BackColor = Color.FromArgb(185, 76, 18);
+                lblTag.ForeColor = Color.White;
+                return;
+            }
 
             if (hasOffline && !needsNet)
             {
@@ -1071,6 +1143,13 @@ namespace Qinstall
                 if (cont != DialogResult.Yes) return;
             }
 
+            await RunOfflineDownloadBatchAsync(downloadable);
+        }
+
+        private async Task RunOfflineDownloadBatchAsync(List<AppItem> downloadable)
+        {
+            if (downloadable == null || downloadable.Count == 0) return;
+
             _isInstalling = true;
             _cancelPending = false;
             _engine.ResetCancellation();
@@ -1093,6 +1172,7 @@ namespace Qinstall
                 if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
                 {
                     string key = GetAppKey(app);
+                    _outdatedOfflineCaches.Remove(key);
                     _selectedState[key] = false;
                     CheckBox cb;
                     if (_appCheckboxes.TryGetValue(key, out cb)) cb.Checked = false;
@@ -1187,6 +1267,91 @@ namespace Qinstall
                         return;
                     }
                     selected = offlineReady;
+                }
+            }
+            else if (_wingetAvailable)
+            {
+                // Con Internet: validar si algun instalador local en cache esta desactualizado y exigir reemplazarlo
+                _lblStatus.Text = "Verificando versiones de instaladores locales...";
+                Dictionary<string, OfflineCacheUpdateInfo> staleSelected = await _engine.CheckOutdatedOfflineCachesAsync(selected);
+                if (staleSelected.Count > 0)
+                {
+                    StringBuilder sbStale = new StringBuilder();
+                    List<AppItem> toReplace = new List<AppItem>();
+                    foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in staleSelected)
+                    {
+                        _outdatedOfflineCaches[kv.Key] = kv.Value;
+                        toReplace.Add(kv.Value.App);
+                        sbStale.AppendLine(string.Format(" - {0}: local v{1}  ->  nueva v{2}", kv.Value.App.Name, kv.Value.LocalVersion, kv.Value.LatestVersion));
+                        Label tagLbl;
+                        if (_appTagLabels.TryGetValue(kv.Key, out tagLbl)) ApplyTagStyle(tagLbl, kv.Value.App, _installedApps.Contains(kv.Key));
+                    }
+
+                    DialogResult mustReplace = MessageBox.Show(
+                        this,
+                        "Hay una nueva version disponible para estos instaladores locales y DEBES reemplazarlos antes de instalar:\n\n" +
+                        sbStale.ToString() +
+                        "\n¿Deseas reemplazarlos por la ultima version ahora y continuar con la instalacion?",
+                        "Reemplazo obligatorio de instalador local — Qinstall",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (mustReplace != DialogResult.Yes)
+                    {
+                        _lblStatus.Text = "Instalacion bloqueada: debes reemplazar los instaladores locales desactualizados.";
+                        return;
+                    }
+
+                    _isInstalling = true;
+                    _cancelPending = false;
+                    _engine.ResetCancellation();
+                    SetUiBusyState(true);
+                    _progressBar.Minimum = 0;
+                    _progressBar.Maximum = toReplace.Count * 100;
+                    _progressBar.Value = 0;
+
+                    bool replaceFailed = false;
+                    for (int r = 0; r < toReplace.Count; r++)
+                    {
+                        AppItem staleApp = toReplace[r];
+                        _lblStatus.Text = string.Format("Reemplazando instalador ({0}/{1}): {2}...", r + 1, toReplace.Count, staleApp.Name);
+                        InstallResult dlRes = await _engine.DownloadForOfflineAsync(staleApp);
+                        string rKey = GetAppKey(staleApp);
+                        if (dlRes.Status == InstallStatus.Success)
+                        {
+                            _outdatedOfflineCaches.Remove(rKey);
+                            Label tagLbl;
+                            if (_appTagLabels.TryGetValue(rKey, out tagLbl)) ApplyTagStyle(tagLbl, staleApp, _installedApps.Contains(rKey));
+                        }
+                        else
+                        {
+                            replaceFailed = true;
+                            selected.Remove(staleApp);
+                        }
+                        _progressBar.Value = (r + 1) * 100;
+                        if (dlRes.Status == InstallStatus.Cancelled)
+                        {
+                            _isInstalling = false;
+                            _cancelPending = false;
+                            SetUiBusyState(false);
+                            _lblStatus.Text = "Reemplazo cancelado.";
+                            return;
+                        }
+                    }
+
+                    _isInstalling = false;
+                    _cancelPending = false;
+                    SetUiBusyState(false);
+
+                    if (selected.Count == 0)
+                    {
+                        MessageBox.Show(this, "No se pudieron reemplazar los instaladores desactualizados. Instalacion detenida.", "Qinstall", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                    if (replaceFailed)
+                    {
+                        AppendLog("[!] Se omitieron los instaladores que no se pudieron reemplazar.");
+                    }
                 }
             }
 
