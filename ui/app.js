@@ -381,27 +381,39 @@ function replayLoadingScreen() {
    ========================================================================== */
 function updateEnvHeader() {
   const netBadge = document.getElementById('netBadge');
-  const netText = document.getElementById('netBadgeText');
+  const netIcon = document.getElementById('netBadgeIcon');
+  const diagNet = document.getElementById('diagNetVal');
   if (state.env.hasInternet) {
-    netBadge.className = 'env-badge';
-    netText.textContent = 'Internet: OK';
+    netBadge.className = 'env-badge icon-pill';
+    netBadge.title = 'Internet: Conectado (OK)';
+    if (netIcon) netIcon.setAttribute('data-lucide', 'wifi');
+    if (diagNet) diagNet.textContent = 'Conectado (OK)';
   } else {
-    netBadge.className = 'env-badge offline';
-    netText.textContent = 'Sin Internet (Offline)';
+    netBadge.className = 'env-badge icon-pill offline';
+    netBadge.title = 'Sin Internet (Modo Offline)';
+    if (netIcon) netIcon.setAttribute('data-lucide', 'wifi-off');
+    if (diagNet) diagNet.textContent = 'Sin conexión';
   }
 
   const wgBadge = document.getElementById('wingetBadge');
-  const wgText = document.getElementById('wingetBadgeText');
+  const wgIcon = document.getElementById('wingetBadgeIcon');
   const btnWg = document.getElementById('btnInstallWinget');
+  const diagWg = document.getElementById('diagWingetVal');
   if (state.env.wingetAvailable) {
-    wgBadge.className = 'env-badge';
-    wgText.textContent = state.env.wingetVersion ? `Winget OK (${state.env.wingetVersion})` : 'Winget OK';
+    const wgLabel = state.env.wingetVersion ? `Winget OK (${state.env.wingetVersion})` : 'Winget OK';
+    wgBadge.className = 'env-badge icon-pill';
+    wgBadge.title = wgLabel;
+    if (wgIcon) wgIcon.setAttribute('data-lucide', 'package-check');
+    if (diagWg) diagWg.textContent = state.env.wingetVersion || 'Disponible';
     btnWg.style.display = 'none';
   } else {
-    wgBadge.className = 'env-badge error';
-    wgText.textContent = 'Sin Winget';
+    wgBadge.className = 'env-badge icon-pill error';
+    wgBadge.title = 'Winget no instalado';
+    if (wgIcon) wgIcon.setAttribute('data-lucide', 'package-x');
+    if (diagWg) diagWg.textContent = 'No instalado';
     btnWg.style.display = state.env.hasInternet ? 'inline-flex' : 'none';
   }
+  refreshIcons();
 }
 
 function toggleThemeMenu() {
@@ -412,6 +424,7 @@ function selectTheme(mode) {
   state.themeMode = mode;
   localStorage.setItem('qinstall_theme', mode);
   applyTheme(mode);
+  persistPortableProfiles();
   document.getElementById('themeMenu').classList.remove('show');
 }
 
@@ -427,19 +440,19 @@ function applyTheme(mode) {
     btn.classList.toggle('active', btn.dataset.themeVal === mode);
   });
 
-  const label = document.getElementById('currentThemeLabel');
+  const btn = document.getElementById('themeToggleBtn');
   const icon = document.getElementById('currentThemeIcon');
-  if (label && icon) {
+  if (icon) {
     if (mode === 'dark') {
-      label.textContent = 'Modo Oscuro';
+      if (btn) btn.title = 'Tema: Modo Oscuro';
       icon.setAttribute('data-lucide', 'moon');
       icon.style.color = '#60a5fa';
     } else if (mode === 'light') {
-      label.textContent = 'Modo Claro';
+      if (btn) btn.title = 'Tema: Modo Claro';
       icon.setAttribute('data-lucide', 'sun');
       icon.style.color = '#f59e0b';
     } else {
-      label.textContent = 'Sistema';
+      if (btn) btn.title = 'Tema: Sistema';
       icon.setAttribute('data-lucide', 'laptop');
       icon.style.color = '#10b981';
     }
@@ -1340,7 +1353,8 @@ function saveSettings() {
 }
 
 function confirmPurgeOfflineCache() {
-  toggleSettingsModal();
+  document.getElementById('settingsBackdrop').classList.remove('show');
+  document.getElementById('exportBackdrop').classList.remove('show');
   openDialogModal(
     'Eliminar instaladores descargados',
     `<p style="font-size:13px; color:var(--text-secondary);">Se eliminarán todos los instaladores descargados con <b>Descargar offline</b> en <b>local\\cache\\</b>. Los instaladores que agregaste manualmente en <b>local\\</b> y <b>office\\</b> se conservarán.</p>`,
@@ -1440,11 +1454,12 @@ function openDialogModal(title, bodyHtml, footerHtml) {
 
 function openPortableExportModal() {
   if (state.isBusy) {
-    showToast('Espera a que termine la operación actual antes de exportar.', 'warn');
+    showToast('Espera a que termine la operación actual antes de abrir Almacenamiento.', 'warn');
     return;
   }
   const modal = document.getElementById('exportBackdrop');
   if (!modal) return;
+  updateStorageSettingsView();
   modal.classList.add('show');
   postToHost({ action: 'listDrives' });
   refreshIcons();

@@ -350,16 +350,31 @@ body {
   width: 7px; height: 7px; border-radius: 50%;
   background: currentColor; box-shadow: 0 0 8px currentColor;
 }
+.env-badge.icon-pill {
+  height: 32px; padding: 0 9px; gap: 6px;
+}
 
 .btn-header {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 11px; border-radius: var(--radius-sm);
+  height: 32px; padding: 0 11px; border-radius: var(--radius-sm);
   font-size: 12px; font-weight: 600;
   background: var(--bg-surface-3); color: var(--text-primary);
   border: 1px solid var(--border-medium);
   cursor: pointer; transition: all var(--transition-fast);
   font-family: inherit; white-space: nowrap;
 }
+.btn-header.icon-compact { padding: 0 9px; gap: 4px; }
+.btn-header.icon-only-btn { width: 34px; padding: 0; justify-content: center; }
+.env-diag-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
+}
+.env-diag-item {
+  background: var(--bg-surface-1); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.env-diag-k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700; }
+.env-diag-v { font-size: 12px; font-weight: 700; color: var(--text-primary); font-family: 'Cascadia Code', monospace; }
 .btn-header:hover { background: var(--bg-surface-2); border-color: var(--border-focus); }
 .btn-header.admin-ok {
   background: var(--status-installed-bg); color: var(--status-installed-text);

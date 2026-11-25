@@ -113,12 +113,28 @@
       </div>
 
       <div class="header-actions">
-        <!-- Selector de Tema -->
+        <!-- Estado compacto de Red -->
+        <div class="env-badge icon-pill" id="netBadge" title="Estado de conexión a Internet">
+          <span class="dot"></span>
+          <i data-lucide="wifi" id="netBadgeIcon" style="width: 14px; height: 14px;"></i>
+        </div>
+
+        <!-- Estado compacto de Winget -->
+        <div class="env-badge icon-pill" id="wingetBadge" title="Estado de Winget">
+          <span class="dot"></span>
+          <i data-lucide="package-check" id="wingetBadgeIcon" style="width: 14px; height: 14px;"></i>
+        </div>
+
+        <button class="btn-header warn-cta" id="btnInstallWinget" style="display: none;" onclick="requestInstallWinget()" title="Instalar Winget automáticamente">
+          <i data-lucide="download" style="width: 14px; height: 14px;"></i>
+          <span>Instalar Winget</span>
+        </button>
+
+        <!-- Selector de Tema (compacto) -->
         <div class="theme-dropdown-wrap" id="themeDropdownWrap">
-          <button class="btn-header" id="themeToggleBtn" onclick="toggleThemeMenu()" title="Modo de apariencia">
-            <i data-lucide="moon" id="currentThemeIcon" style="width: 14px; height: 14px; color: #60a5fa;"></i>
-            <span id="currentThemeLabel">Modo Oscuro</span>
-            <i data-lucide="chevron-down" style="width: 12px; height: 12px; opacity: 0.65;"></i>
+          <button class="btn-header icon-compact" id="themeToggleBtn" onclick="toggleThemeMenu()" title="Modo de apariencia" aria-label="Modo de apariencia">
+            <i data-lucide="moon" id="currentThemeIcon" style="width: 15px; height: 15px; color: #60a5fa;"></i>
+            <i data-lucide="chevron-down" style="width: 11px; height: 11px; opacity: 0.65;"></i>
           </button>
           <div class="theme-menu" id="themeMenu">
             <div class="theme-menu-header">Modo de Apariencia</div>
@@ -155,31 +171,13 @@
           </div>
         </div>
 
-        <!-- Estado de Red -->
-        <div class="env-badge" id="netBadge" title="Estado de conexión a Internet">
-          <span class="dot"></span>
-          <span id="netBadgeText">Red...</span>
-        </div>
-
-        <!-- Estado Winget -->
-        <div class="env-badge" id="wingetBadge" title="Gestor de paquetes Winget">
-          <span class="dot"></span>
-          <span id="wingetBadgeText">Winget...</span>
-        </div>
-
-        <button class="btn-header warn-cta" id="btnInstallWinget" style="display: none;" onclick="requestInstallWinget()">
-          <i data-lucide="download" style="width: 14px; height: 14px;"></i>
-          <span>Instalar Winget</span>
+        <button class="btn-header" onclick="openPortableExportModal()" title="Almacenamiento, instaladores descargados y copia portable">
+          <i data-lucide="hard-drive" style="width: 15px; height: 15px; color: var(--cyan-accent);"></i>
+          <span>Almacenamiento</span>
         </button>
 
-        <button class="btn-header" onclick="openPortableExportModal()" title="Copiar qInstall listo para usar a un pendrive USB o disco duro externo">
-          <i data-lucide="hard-drive" style="width: 14px; height: 14px; color: var(--cyan-accent);"></i>
-          <span>Pendrive / HDD</span>
-        </button>
-
-        <button class="btn-header" onclick="toggleSettingsModal()" title="Ajustes de qInstall">
-          <i data-lucide="settings" style="width: 14px; height: 14px;"></i>
-          <span>Ajustes</span>
+        <button class="btn-header icon-only-btn" onclick="toggleSettingsModal()" title="Ajustes de qInstall" aria-label="Ajustes">
+          <i data-lucide="settings" style="width: 16px; height: 16px;"></i>
         </button>
       </div>
     </header>
@@ -261,13 +259,13 @@
       <div class="toolbar-tools">
         <button class="btn-tool" onclick="confirmUpgradeAll()" title="Actualizar todas las aplicaciones instaladas vía Winget">
           <i data-lucide="arrow-up-circle" style="width: 14px; height: 14px;"></i>
-          <span>Actualizar todo</span>
+          <span>Actualizar</span>
         </button>
-        <button class="btn-tool local-tool" onclick="requestAddLocalInstaller()" title="Agregar un .exe o .msi local para usar sin Internet">
+        <button class="btn-tool local-tool" onclick="requestAddLocalInstaller()" title="Agregar un instalador .exe o .msi local para usar sin Internet">
           <i data-lucide="folder-plus" style="width: 14px; height: 14px;"></i>
-          <span>+ Instalador local</span>
+          <span>+ Local</span>
         </button>
-        <button class="btn-tool icon-only" onclick="requestRefresh()" title="Re-escanear red, carpeta local\ y apps instaladas">
+        <button class="btn-tool icon-only" onclick="requestRefresh()" title="Re-escanear red, almacenamiento y apps instaladas">
           <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
         </button>
       </div>
@@ -423,13 +421,31 @@
       <div class="modal-header">
         <div class="modal-title">
           <i data-lucide="sliders" style="width: 17px; height: 17px; color: var(--primary);"></i>
-          <span>Ajustes de qInstall</span>
+          <span>Ajustes</span>
         </div>
         <button class="modal-close" onclick="toggleSettingsModal()"><i data-lucide="x" style="width: 16px;"></i></button>
       </div>
       <div class="modal-body">
         <div class="settings-group">
-          <div class="settings-group-title">Motor de Despliegue &amp; Seguridad</div>
+          <div class="settings-group-title">Estado del Entorno</div>
+          <div class="env-diag-grid">
+            <div class="env-diag-item">
+              <span class="env-diag-k">Internet</span>
+              <span class="env-diag-v" id="diagNetVal">Verificando...</span>
+            </div>
+            <div class="env-diag-item">
+              <span class="env-diag-k">Winget</span>
+              <span class="env-diag-v" id="diagWingetVal">Verificando...</span>
+            </div>
+            <div class="env-diag-item">
+              <span class="env-diag-k">Perfiles</span>
+              <span class="env-diag-v">profiles.json</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Motor y Seguridad</div>
           <label class="settings-toggle-row">
             <div>
               <div class="settings-label">Instalación silenciosa por defecto</div>
@@ -445,42 +461,16 @@
             <input type="checkbox" id="setUpgrade" checked class="settings-switch">
           </label>
           <div class="settings-actions-row" style="margin-top: 4px;">
-            <button class="btn-tool" onclick="confirmCreateRestorePoint()"><i data-lucide="shield-check" style="width: 14px;"></i> Crear punto de restauración</button>
-            <button class="btn-tool" onclick="toggleSettingsModal(); confirmUpgradeAll();"><i data-lucide="arrow-up-circle" style="width: 14px;"></i> Actualizar todas las apps</button>
+            <button class="btn-tool" onclick="confirmCreateRestorePoint()"><i data-lucide="shield-check" style="width: 14px;"></i> Punto de restauración</button>
+            <button class="btn-tool" onclick="toggleSettingsModal(); confirmUpgradeAll();"><i data-lucide="arrow-up-circle" style="width: 14px;"></i> Actualizar todo</button>
           </div>
         </div>
 
         <div class="settings-group">
-          <div class="settings-group-title">Almacenamiento &amp; Carpeta Local (Pendrive)</div>
-          <div class="storage-card" id="storageSummaryBox">
-            <div class="storage-meta">
-              <span id="storageDriveLabel">Unidad actual</span>
-              <span id="storageCacheLabel" style="font-family:'Cascadia Code', monospace; color: var(--primary);">Caché: 0 MB</span>
-            </div>
-            <div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width: 0%;"></div></div>
-            <div class="storage-meta" style="font-size: 11px; color: var(--text-muted);">
-              <span id="storageFreeLabel">Libre: —</span>
-              <span>Perfiles portables: profiles.json</span>
-            </div>
-          </div>
-          <div class="settings-path-box" id="settingsLocalPath">local\</div>
+          <div class="settings-group-title">Apariencia y Accesos</div>
           <div class="settings-actions-row">
-            <button class="btn-tool" onclick="postToHost({ action: 'openLocalFolder' })"><i data-lucide="folder-open" style="width: 14px;"></i> Abrir carpeta local\</button>
-            <button class="btn-tool" onclick="requestAddLocalInstaller(); toggleSettingsModal();"><i data-lucide="folder-plus" style="width: 14px;"></i> Agregar instalador</button>
-            <button class="btn-tool" onclick="toggleSettingsModal(); openPortableExportModal();"><i data-lucide="hard-drive" style="width: 14px;"></i> Copiar a Pendrive / HDD</button>
-          </div>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Gestor de Instaladores Descargados &amp; Apariencia</div>
-          <div class="settings-desc">Elimina un instalador puntual para liberar espacio en el pendrive, o purga los obsoletos si salió una versión nueva:</div>
-          <div class="cached-list" id="cachedAppsManager">
-            <div style="font-size:11.5px; color:var(--text-muted); padding:6px;">No hay instaladores descargados en local\cache\.</div>
-          </div>
-          <div class="settings-actions-row">
-            <button class="btn-tool" onclick="postToHost({ action: 'purgeOutdated' })"><i data-lucide="sparkles" style="width: 14px;"></i> Purgar obsoletos</button>
-            <button class="btn-tool" onclick="confirmPurgeOfflineCache()"><i data-lucide="trash-2" style="width: 14px;"></i> Eliminar todos</button>
-            <button class="btn-tool" onclick="replayLoadingScreen()"><i data-lucide="play-circle" style="width: 14px;"></i> Ver Pantalla de Carga</button>
+            <button class="btn-tool" onclick="toggleSettingsModal(); openPortableExportModal();"><i data-lucide="hard-drive" style="width: 14px;"></i> Almacenamiento</button>
+            <button class="btn-tool" onclick="replayLoadingScreen()"><i data-lucide="play-circle" style="width: 14px;"></i> Pantalla de Carga</button>
           </div>
         </div>
       </div>
@@ -491,55 +481,80 @@
     </div>
   </div>
 
-  <!-- MODAL EXPORTAR PORTABLE A PENDRIVE / DISCO EXTERNO -->
+  <!-- MODAL ALMACENAMIENTO (ESPACIO, INSTALADORES DESCARGADOS Y COPIA PORTABLE) -->
   <div class="modal-backdrop" id="exportBackdrop" onclick="if(event.target===this) closePortableExportModal()">
-    <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-box" style="max-width: 600px;" onclick="event.stopPropagation()">
       <div class="modal-header">
         <div class="modal-title">
           <i data-lucide="hard-drive" style="width: 17px; height: 17px; color: var(--cyan-accent);"></i>
-          <span>Copiar qInstall a Pendrive USB o Disco Externo</span>
+          <span>Almacenamiento</span>
         </div>
         <button class="modal-close" onclick="closePortableExportModal()"><i data-lucide="x" style="width: 16px;"></i></button>
       </div>
       <div class="modal-body">
-        <div class="settings-desc">
-          qInstall es <b>100% portable</b>. Selecciona tu pendrive USB o disco duro externo para copiar una versión limpia lista para usar en cualquier PC (sin archivos de desarrollo):
+        <div class="settings-group">
+          <div class="settings-group-title">Unidad Actual</div>
+          <div class="storage-card" id="storageSummaryBox">
+            <div class="storage-meta">
+              <span id="storageDriveLabel">Unidad actual</span>
+              <span id="storageCacheLabel" style="font-family:'Cascadia Code', monospace; color: var(--primary);">Descargados: 0 MB</span>
+            </div>
+            <div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width: 0%;"></div></div>
+            <div class="storage-meta" style="font-size: 11px; color: var(--text-muted);">
+              <span id="storageFreeLabel">Libre: —</span>
+              <span>Modo 100% portable</span>
+            </div>
+          </div>
+          <div class="settings-path-box" id="settingsLocalPath">local\</div>
+          <div class="settings-actions-row">
+            <button class="btn-tool" onclick="postToHost({ action: 'openLocalFolder' })"><i data-lucide="folder-open" style="width: 14px;"></i> Abrir local\</button>
+            <button class="btn-tool" onclick="closePortableExportModal(); requestAddLocalInstaller();"><i data-lucide="folder-plus" style="width: 14px;"></i> + Instalador local</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Instaladores Descargados</div>
+          <div class="cached-list" id="cachedAppsManager">
+            <div style="font-size:11.5px; color:var(--text-muted); padding:6px;">No hay instaladores descargados en local\cache\.</div>
+          </div>
+          <div class="settings-actions-row">
+            <button class="btn-tool" onclick="postToHost({ action: 'purgeOutdated' })"><i data-lucide="sparkles" style="width: 14px;"></i> Purgar obsoletos</button>
+            <button class="btn-tool" onclick="closePortableExportModal(); confirmPurgeOfflineCache();"><i data-lucide="trash-2" style="width: 14px;"></i> Eliminar todos</button>
+          </div>
         </div>
 
         <div class="settings-group">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="settings-group-title">Unidades Detectadas</div>
+            <div class="settings-group-title">Copiar qInstall a Otra Unidad</div>
             <button class="btn-tool" style="height:26px; font-size:11px; padding:0 8px;" onclick="postToHost({ action: 'listDrives' })">
               <i data-lucide="refresh-cw" style="width:12px;height:12px;"></i> Re-escanear
             </button>
           </div>
           <div class="drive-list" id="exportDrivesList">
-            <div style="font-size:12px; color:var(--text-muted); padding:8px;">Buscando pendrives y discos conectados...</div>
+            <div style="font-size:12px; color:var(--text-muted); padding:8px;">Buscando unidades conectadas...</div>
           </div>
-        </div>
-
-        <div class="settings-group">
-          <div class="settings-group-title">Carpeta Destino en la Unidad</div>
-          <div style="display:flex; gap:8px; align-items:center;">
+          <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
             <input type="text" id="exportDestInput" placeholder="Ej. E:\Qinstall" style="flex:1; height:34px; padding:0 10px; border-radius:var(--radius-sm); border:1px solid var(--border-medium); background:var(--bg-surface-1); color:var(--text-primary); font-family:'Cascadia Code', monospace; font-size:12px;">
             <button class="btn-tool" style="height:34px;" onclick="postToHost({ action: 'pickExportFolder' })">
               <i data-lucide="folder-open" style="width:14px;height:14px;"></i> Examinar...
             </button>
           </div>
-          <label class="checkbox-label" style="margin-top:4px;">
-            <input type="checkbox" id="exportIncludeCache" checked>
-            <span>Incluir instaladores descargados offline (<code>local\cache\</code>)</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="exportIncludeOffice" checked>
-            <span>Incluir instalador y plantillas de Office (<code>office\</code>)</span>
-          </label>
+          <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:2px;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="exportIncludeCache" checked>
+              <span>Incluir descargados (<code>local\cache\</code>)</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="exportIncludeOffice" checked>
+              <span>Incluir Office (<code>office\</code>)</span>
+            </label>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-header" onclick="closePortableExportModal()">Cancelar</button>
+        <button class="btn-header" onclick="closePortableExportModal()">Cerrar</button>
         <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="startPortableExport()">
-          <i data-lucide="hard-drive-download" style="width:15px;height:15px;"></i> Copiar a unidad ahora
+          <i data-lucide="hard-drive-download" style="width:15px;height:15px;"></i> Copiar a unidad
         </button>
       </div>
     </div>
