@@ -2,6 +2,18 @@
    QINSTALL — PRODUCTION WEBVIEW2 CONTROLLER
    Bridges all prototype UX features with real C# InstallerEngine backend.
    ========================================================================== */
+const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+const LOADER_DURATION_MS = 7000;
+
+const loaderState = {
+  running: false,
+  startTime: 0,
+  rafId: null,
+  backendReady: false,
+  lastText: 'Verificando red y Winget runtime...',
+  pendingOutdated: null
+};
+
 const state = {
   apps: [],
   onlineResults: [],
@@ -90,14 +102,23 @@ if (window.chrome && window.chrome.webview) {
 
     switch (msg.type) {
       case 'loaderStep':
-        updateLoader(msg.pct, msg.dot, msg.text);
+        if (msg.text) loaderState.lastText = msg.text;
+        if (msg.pct >= 100) loaderState.backendReady = true;
         break;
       case 'stateUpdate':
         state.apps = msg.apps || [];
         state.env = msg.env || state.env;
         updateEnvHeader();
-        renderAllViews();
-        updateCounter();
+        if (loaderState.running) {
+          // Diferir el renderizado para no trabar la animacion fluida del loader
+          setTimeout(() => {
+            renderActiveView();
+            updateCounter();
+          }, 50);
+        } else {
+          renderActiveView();
+          updateCounter();
+        }
         const pathEl = document.getElementById('settingsLocalPath');
         if (pathEl && state.env.localDir) pathEl.textContent = state.env.localDir;
         if (!state.isBusy) {
@@ -112,7 +133,7 @@ if (window.chrome && window.chrome.webview) {
         if (msg.seq === state.searchSeq) {
           state.onlineResults = msg.items || [];
           state.isSearchingOnline = false;
-          renderAllViews();
+          renderActiveView();
         }
         break;
       case 'log':
@@ -132,7 +153,11 @@ if (window.chrome && window.chrome.webview) {
         applySingleAppUpdate(msg);
         break;
       case 'outdatedAlert':
-        showOutdatedModal(msg.items || [], false);
+        if (loaderState.running) {
+          loaderState.pendingOutdated = msg.items || [];
+        } else {
+          showOutdatedModal(msg.items || [], false);
+        }
         break;
       case 'mandatoryReplacePrompt':
         showOutdatedModal(msg.items || [], true, msg.silent, msg.upgrade);
@@ -152,52 +177,93 @@ if (window.chrome && window.chrome.webview) {
 }
 
 /* ==========================================================================
-   LOADING OVERLAY
+   LOADING OVERLAY (7 SEGUNDOS FLUIDOS A 60 FPS)
    ========================================================================== */
-function updateLoader(pct, dotIdx, text) {
+function startSmoothLoader(waitForBackend) {
+  if (loaderState.rafId) cancelAnimationFrame(loaderState.rafId);
+
+  const ov = document.getElementById('loadingOverlay');
   const bar = document.getElementById('loaderBar');
   const runner = document.getElementById('loaderNyanRunner');
   const span = document.getElementById('loaderStatusSpan');
-  if (bar) bar.style.width = pct + '%';
-  if (runner) runner.style.left = pct + '%';
-  if (span && text) span.textContent = text;
+  const dots = [0, 1, 2, 3].map(i => document.getElementById('dot' + i));
 
-  for (let i = 0; i < 4; i++) {
-    const d = document.getElementById('dot' + i);
-    if (d) d.classList.toggle('active', i <= dotIdx);
+  if (ov) ov.classList.remove('hidden');
+  loaderState.running = true;
+  loaderState.startTime = performance.now();
+  if (!waitForBackend) loaderState.backendReady = true;
+
+  let lastDot = -1;
+  let lastShownText = '';
+
+  function tick(now) {
+    const elapsed = now - loaderState.startTime;
+    const rawRatio = Math.min(1, elapsed / LOADER_DURATION_MS);
+    // Curva suave ease-in-out cubica
+    const eased = rawRatio < 0.5
+      ? 2 * rawRatio * rawRatio
+      : 1 - Math.pow(-2 * rawRatio + 2, 2) / 2;
+
+    let pct = eased * 100;
+    if (waitForBackend && !loaderState.backendReady && pct > 95) {
+      pct = 95;
+    }
+
+    if (bar) bar.style.width = pct.toFixed(2) + '%';
+    if (runner) runner.style.left = pct.toFixed(2) + '%';
+
+    const dotIdx = pct < 25 ? 0 : (pct < 55 ? 1 : (pct < 85 ? 2 : 3));
+    if (dotIdx !== lastDot) {
+      lastDot = dotIdx;
+      dots.forEach((d, idx) => d && d.classList.toggle('active', idx <= dotIdx));
+    }
+
+    let stepText;
+    if (pct < 25) {
+      stepText = 'Verificando red y Winget runtime...';
+    } else if (pct < 55) {
+      stepText = state.apps.length > 0
+        ? `Cargando catálogo (${state.apps.length} aplicaciones y carpeta local\\)...`
+        : 'Cargando catálogo apps.json y carpeta local\\...';
+    } else if (pct < 88) {
+      stepText = state.apps.length > 0
+        ? `Escaneando Windows (${state.env.installedCount || 0} aplicaciones detectadas)...`
+        : 'Escaneando aplicaciones instaladas en Windows...';
+    } else {
+      stepText = '¡Todo listo! Preparando interfaz...';
+    }
+
+    if (span && stepText !== lastShownText) {
+      lastShownText = stepText;
+      span.textContent = stepText;
+    }
+
+    if (elapsed >= LOADER_DURATION_MS && (!waitForBackend || loaderState.backendReady)) {
+      if (bar) bar.style.width = '100%';
+      if (runner) runner.style.left = '100%';
+      loaderState.running = false;
+      loaderState.rafId = null;
+      setTimeout(() => {
+        if (ov) ov.classList.add('hidden');
+        if (loaderState.pendingOutdated && loaderState.pendingOutdated.length > 0) {
+          const items = loaderState.pendingOutdated;
+          loaderState.pendingOutdated = null;
+          showOutdatedModal(items, false);
+        }
+      }, 180);
+      return;
+    }
+
+    loaderState.rafId = requestAnimationFrame(tick);
   }
 
-  if (pct >= 100) {
-    setTimeout(() => {
-      const ov = document.getElementById('loadingOverlay');
-      if (ov) ov.classList.add('hidden');
-    }, 350);
-  }
+  loaderState.rafId = requestAnimationFrame(tick);
 }
 
 function replayLoadingScreen() {
   const modal = document.getElementById('settingsBackdrop');
   if (modal) modal.classList.remove('show');
-  const ov = document.getElementById('loadingOverlay');
-  if (!ov) return;
-  ov.classList.remove('hidden');
-
-  const steps = [
-    { pct: 25, dot: 0, text: 'Verificando red y Winget runtime...' },
-    { pct: 55, dot: 1, text: `Cargando catálogo (${state.apps.length} aplicaciones)...` },
-    { pct: 85, dot: 2, text: `Escaneando sistema (${state.env.installedCount || 0} instaladas)...` },
-    { pct: 100, dot: 3, text: '¡Todo listo!' }
-  ];
-  updateLoader(0, -1, 'Iniciando...');
-  let i = 0;
-  const t = setInterval(() => {
-    if (i < steps.length) {
-      updateLoader(steps[i].pct, steps[i].dot, steps[i].text);
-      i++;
-    } else {
-      clearInterval(t);
-    }
-  }, 380);
+  startSmoothLoader(false);
 }
 
 /* ==========================================================================
@@ -321,11 +387,18 @@ function getFilteredApps() {
   );
 }
 
-function renderAllViews() {
+function renderActiveView() {
   const filtered = getFilteredApps();
-  renderCardsView(filtered);
-  renderTableView(filtered);
+  if (state.viewMode === 'table') {
+    renderTableView(filtered);
+  } else {
+    renderCardsView(filtered);
+  }
   refreshIcons();
+}
+
+function renderAllViews() {
+  renderActiveView();
 }
 
 function renderCardsView(filtered) {
@@ -413,7 +486,7 @@ function renderCardRow(app, isOnlineSearch) {
     <div class="app-row ${isSel ? 'selected' : ''}" data-key="${escapeHtml(app.key)}" title="${tip}"
          onclick="toggleAppSelection(decodeURIComponent('${encodedKey}'), ${isOnlineSearch})" ${ctxAttr}>
       <div class="app-left">
-        <div class="custom-checkbox"><i data-lucide="check"></i></div>
+        <div class="custom-checkbox">${CHECK_SVG}</div>
         <span class="app-name">${escapeHtml(app.name)}</span>
       </div>
       <div class="app-right">
@@ -446,7 +519,7 @@ function renderTableView(filtered) {
       <tr class="table-row ${isSel ? 'selected' : ''}" data-key="${escapeHtml(app.key)}"
           onclick="toggleAppSelection(decodeURIComponent('${encodedKey}'), ${isOnline})">
         <td style="text-align:center;">
-          <div class="custom-checkbox" style="margin:auto;"><i data-lucide="check"></i></div>
+          <div class="custom-checkbox" style="margin:auto;">${CHECK_SVG}</div>
         </td>
         <td><span class="table-app-name">${escapeHtml(app.name)}</span></td>
         <td>
@@ -524,6 +597,9 @@ function switchView(mode) {
   document.getElementById('appTableContainer').style.display = mode === 'table' ? 'flex' : 'none';
   document.getElementById('viewBtnCards').classList.toggle('active', mode === 'cards');
   document.getElementById('viewBtnTable').classList.toggle('active', mode === 'table');
+  if (state.apps.length > 0) {
+    renderActiveView();
+  }
 }
 
 function toggleEssentials() {
@@ -997,5 +1073,6 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   applyTheme(state.themeMode);
   switchView(state.viewMode);
   refreshIcons();
+  startSmoothLoader(true);
   postToHost({ action: 'init' });
 })();
