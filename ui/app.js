@@ -34,8 +34,26 @@ const state = {
   searchSeq: 0,
   searchTimer: null,
   viewMode: localStorage.getItem('qinstall_view') || 'cards',
+  galleryCategory: 'Todas',
   themeMode: localStorage.getItem('qinstall_theme') || 'dark',
   contextKey: null
+};
+
+const CATEGORY_GRADIENTS = {
+  'navegadores': ['#2563eb', '#06b6d4'],
+  'utilidades': ['#4f46e5', '#8b5cf6'],
+  'optimizacion': ['#d97706', '#f59e0b'],
+  'arranque y reparacion': ['#dc2626', '#f97316'],
+  'multimedia': ['#db2777', '#ec4899'],
+  'comunicacion': ['#059669', '#10b981'],
+  'oficina': ['#0284c7', '#3b82f6'],
+  'ia y agentes': ['#7c3aed', '#06b6d4'],
+  'desarrollo': ['#0d9488', '#22d3ee'],
+  'juegos': ['#9333ea', '#ec4899'],
+  'runtimes': ['#475569', '#64748b'],
+  'java': ['#b45309', '#ea580c'],
+  'instaladores locales': ['#0f766e', '#14b8a6'],
+  'resultados online (winget)': ['#059669', '#22c55e']
 };
 
 const CATEGORY_ICONS = {
@@ -323,11 +341,11 @@ function applyTheme(mode) {
   const icon = document.getElementById('currentThemeIcon');
   if (label && icon) {
     if (mode === 'dark') {
-      label.textContent = 'Oscuro';
+      label.textContent = 'Modo Oscuro';
       icon.setAttribute('data-lucide', 'moon');
       icon.style.color = '#60a5fa';
     } else if (mode === 'light') {
-      label.textContent = 'Claro Gris';
+      label.textContent = 'Modo Claro';
       icon.setAttribute('data-lucide', 'sun');
       icon.style.color = '#f59e0b';
     } else {
@@ -391,10 +409,92 @@ function renderActiveView() {
   const filtered = getFilteredApps();
   if (state.viewMode === 'table') {
     renderTableView(filtered);
+  } else if (state.viewMode === 'gallery') {
+    renderGalleryView(filtered);
   } else {
     renderCardsView(filtered);
   }
   refreshIcons();
+}
+
+function selectGalleryCategory(cat) {
+  state.galleryCategory = cat;
+  renderActiveView();
+}
+
+function renderGalleryView(filtered) {
+  const catBar = document.getElementById('galleryCatBar');
+  const grid = document.getElementById('galleryGrid');
+  if (!catBar || !grid) return;
+
+  const combined = [...filtered];
+  if (state.searchQuery.trim().length >= 2 && state.onlineResults.length > 0) {
+    combined.push(...state.onlineResults);
+  }
+
+  const cats = ['Todas'];
+  for (const app of combined) {
+    const c = app.category || 'Otros';
+    if (!cats.includes(c)) cats.push(c);
+  }
+  if (!cats.includes(state.galleryCategory)) {
+    state.galleryCategory = 'Todas';
+  }
+
+  catBar.innerHTML = cats.map(c => {
+    const enc = encodeURIComponent(c);
+    const active = state.galleryCategory === c ? 'active' : '';
+    const iconName = c === 'Todas' ? 'layers' : (CATEGORY_ICONS[c.toLowerCase()] || 'box');
+    return `<button class="gallery-cat-pill ${active}" onclick="selectGalleryCategory(decodeURIComponent('${enc}'))"><i data-lucide="${iconName}" style="width:12px;height:12px;"></i><span>${escapeHtml(c)}</span></button>`;
+  }).join('');
+
+  const items = state.galleryCategory === 'Todas'
+    ? combined
+    : combined.filter(a => (a.category || 'Otros') === state.galleryCategory);
+
+  if (items.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:32px; color:var(--text-muted);">Sin aplicaciones para mostrar.</div>`;
+    return;
+  }
+
+  grid.innerHTML = items.map(app => {
+    const isSel = state.selectedKeys.has(app.key);
+    const isOnline = !!app.isOnlineSearch;
+    const cat = app.category || 'Otros';
+    const catKey = cat.toLowerCase();
+    const iconName = CATEGORY_ICONS[catKey] || 'box';
+    const [c1, c2] = CATEGORY_GRADIENTS[catKey] || ['#4f46e5', '#8b5cf6'];
+    const badgesHtml = getBadgesHtml(app);
+    const tip = escapeHtml(getAppTooltip(app));
+    const encKey = encodeURIComponent(app.key);
+    const ctxAttr = isOnline ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encKey}'))"`;
+    const saveBtn = isOnline
+      ? `<button class="btn-quick-save" title="Guardar en tu catálogo" onclick="event.stopPropagation(); quickSaveOnline(decodeURIComponent('${encKey}'))">+</button>`
+      : '';
+    const desc = app.description || app.target || 'Aplicación de Windows';
+
+    return `
+      <article class="gallery-card ${isSel ? 'selected' : ''}" data-key="${escapeHtml(app.key)}" title="${tip}"
+               onclick="toggleAppSelection(decodeURIComponent('${encKey}'), ${isOnline})" ${ctxAttr}>
+        <div class="gallery-banner" style="background: linear-gradient(135deg, ${c1}26, ${c2}1c);">
+          <div class="gallery-icon-tile" style="background: linear-gradient(135deg, ${c1}, ${c2});">
+            <i data-lucide="${iconName}" style="width:24px;height:24px;"></i>
+          </div>
+          <div class="gallery-check-pos">
+            ${saveBtn}
+            <div class="custom-checkbox">${CHECK_SVG}</div>
+          </div>
+        </div>
+        <div class="gallery-card-body">
+          <div class="gallery-card-title">${escapeHtml(app.name)}</div>
+          <div class="gallery-card-desc">${escapeHtml(desc)}</div>
+          <div class="gallery-card-footer">
+            <span class="gallery-cat-mini">${escapeHtml(cat)}</span>
+            ${badgesHtml}
+          </div>
+        </div>
+      </article>`;
+  }).join('');
 }
 
 function renderAllViews() {
@@ -575,7 +675,7 @@ function toggleAppSelection(key, isOnlineSearch) {
 }
 
 function syncSelectionVisuals() {
-  document.querySelectorAll('.app-row, .table-row').forEach(el => {
+  document.querySelectorAll('.app-row, .table-row, .gallery-card').forEach(el => {
     const k = el.getAttribute('data-key');
     el.classList.toggle('selected', state.selectedKeys.has(k));
   });
@@ -594,8 +694,10 @@ function switchView(mode) {
   state.viewMode = mode;
   localStorage.setItem('qinstall_view', mode);
   document.getElementById('appGrid').style.display = mode === 'cards' ? 'grid' : 'none';
+  document.getElementById('appGalleryContainer').style.display = mode === 'gallery' ? 'flex' : 'none';
   document.getElementById('appTableContainer').style.display = mode === 'table' ? 'flex' : 'none';
   document.getElementById('viewBtnCards').classList.toggle('active', mode === 'cards');
+  document.getElementById('viewBtnGallery').classList.toggle('active', mode === 'gallery');
   document.getElementById('viewBtnTable').classList.toggle('active', mode === 'table');
   if (state.apps.length > 0) {
     renderActiveView();

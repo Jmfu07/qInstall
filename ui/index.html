@@ -118,7 +118,7 @@
         <div class="theme-dropdown-wrap" id="themeDropdownWrap">
           <button class="btn-header" id="themeToggleBtn" onclick="toggleThemeMenu()" title="Modo de apariencia">
             <i data-lucide="moon" id="currentThemeIcon" style="width: 14px; height: 14px; color: #60a5fa;"></i>
-            <span id="currentThemeLabel">Oscuro</span>
+            <span id="currentThemeLabel">Modo Oscuro</span>
             <i data-lucide="chevron-down" style="width: 12px; height: 12px; opacity: 0.65;"></i>
           </button>
           <div class="theme-menu" id="themeMenu">
@@ -137,8 +137,8 @@
               <div class="theme-option-left">
                 <i data-lucide="sun" style="width: 16px; height: 16px; color: #f59e0b;"></i>
                 <div class="theme-option-text">
-                  <span class="theme-option-title">Modo Claro Gris</span>
-                  <span class="theme-option-desc">Tono gris claro descansado</span>
+                  <span class="theme-option-title">Modo Claro</span>
+                  <span class="theme-option-desc">Tema claro descansado a la vista</span>
                 </div>
               </div>
               <i data-lucide="check" class="theme-check" style="width: 14px; height: 14px;"></i>
@@ -247,6 +247,10 @@
           <i data-lucide="layout-grid" style="width: 13px; height: 13px;"></i>
           <span>Cuadrícula</span>
         </button>
+        <button class="btn-view" id="viewBtnGallery" onclick="switchView('gallery')">
+          <i data-lucide="images" style="width: 13px; height: 13px;"></i>
+          <span>Galería</span>
+        </button>
         <button class="btn-view" id="viewBtnTable" onclick="switchView('table')">
           <i data-lucide="table-2" style="width: 13px; height: 13px;"></i>
           <span>Tabla Densa</span>
@@ -266,6 +270,12 @@
 
     <!-- VISTA CUADRÍCULA -->
     <main class="app-content" id="appGrid"></main>
+
+    <!-- VISTA GALERÍA ADAPTATIVA -->
+    <section class="app-gallery-container" id="appGalleryContainer" style="display: none;">
+      <div class="gallery-cat-bar" id="galleryCatBar"></div>
+      <div class="gallery-grid" id="galleryGrid"></div>
+    </section>
 
     <!-- VISTA TABLA DENSA -->
     <div class="app-table-container" id="appTableContainer">
