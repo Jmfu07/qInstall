@@ -5,13 +5,13 @@
   <h1><code>qInstall</code></h1>
 
   <p>
-    <b>Instalador por lotes 100% portable para Pendrives USB y Discos Externos en Windows 10 / 11</b><br />
+    <b>Instalador por lotes 100% portable para USB, SSD y HDD (internos o externos) en Windows 10 / 11</b><br />
     <sub>Alternativa moderna, visual y online/offline a Ninite · Pensada para post-formateo, soporte técnico y despliegue rápido</sub>
   </p>
 
   <p>
     <img src="https://img.shields.io/badge/Plataforma-Windows%2010%20%7C%2011%20(x64)-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 10/11" />
-    <img src="https://img.shields.io/badge/Modo-100%25%20Portable%20USB%20%2F%20HDD-8B5CF6?style=for-the-badge" alt="100% Portable" />
+    <img src="https://img.shields.io/badge/Modo-100%25%20Portable%20USB%20%7C%20SSD%20%7C%20HDD-8B5CF6?style=for-the-badge" alt="100% Portable USB SSD HDD" />
     <img src="https://img.shields.io/badge/Cat%C3%A1logo-176%20Apps%20%C2%B7%2014%20Categor%C3%ADas-10B981?style=for-the-badge" alt="176 Apps" />
     <img src="https://img.shields.io/badge/Motor-.NET%204.8%20%2B%20WebView2-06B6D4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 4.8 + WebView2" />
   </p>
@@ -42,11 +42,11 @@
 ## ✨ ¿Qué hace diferente a `qInstall`?
 
 > [!IMPORTANT]
-> **`qInstall` no es un programa fijo que se instala en la PC:** está diseñado exclusivamente para ejecutarse desde tu **pendrive USB o disco duro externo**, gestionando todo desde su propia interfaz gráfica sin scripts `.bat` externos ni archivos `.log` basura.
+> **`qInstall` es 100% portable y funciona en cualquier unidad de almacenamiento (`USB`, `SSD` o `HDD`, tanto externos como internos):** no necesita instalación previa en Windows y gestiona todo desde su propia interfaz gráfica sin scripts `.bat` externos ni archivos `.log` basura.
 
 | Pilar | Cómo funciona |
 | :--- | :--- |
-| 💾 **Panel `Almacenamiento` integrado** | Copia `qInstall` limpio a cualquier pendrive o disco externo en 1 clic desde la cabecera, revisa el espacio libre en vivo y borra instaladores descargados uno por uno. |
+| 💾 **Panel `Almacenamiento` integrado** | Copia `qInstall` limpio a cualquier **USB, SSD o HDD** en 1 clic desde la cabecera, revisa el espacio libre en vivo y borra instaladores descargados uno por uno. |
 | 🎒 **Perfiles portables (`profiles.json`)** | Tus perfiles de **Esenciales** (*Estándar, Gamer, Dev, Técnico, Oficina* o tu lista personalizada), tu tema y tu vista preferida viajan guardados en el USB junto a `Qinstall.exe`. |
 | 🎨 **Interfaz WebView2 100% Offline** | **Modo Oscuro**, **Modo Claro** y **Sistema** sincronizado con la barra nativa de Windows, **138 íconos locales** (`564 KB`), **2 vistas** (*Galería* y *Tabla* con acciones directas de 1 clic) y barra **Nyan Cat** fluida a `60 fps`. |
 | ⚡ **Descarga Turbo + Modo Offline real** | Pulsa **Descargar offline** para bajar instaladores (`.exe`, `.msi`, `.msix`, `.appx`, `.zip`) a `local\cache\` con **4 conexiones paralelas + 2 apps simultáneas**, verificación **SHA256**, *staging* en `%TEMP%` y recuperación automática de versión anterior ante errores `404`. Luego instala **100% sin Internet** con **Instalar offline (N)**. |
@@ -59,7 +59,7 @@
 ## 📏 Requisitos del Sistema, Espacio y Pruebas Reales
 
 > [!WARNING]
-> **Capacidad mínima obligatoria en el pendrive: `2 GB`** (tanto de tamaño total como de espacio libre). Si intentas instalar o copiar `qInstall` en una memoria menor a **2 GB**, el programa **bloqueará la operación automáticamente**. Se recomiendan **`4 GB o más`** (`16 GB+` si deseas llevar muchos instaladores descargados offline).
+> **Capacidad mínima obligatoria en la unidad (`USB`, `SSD` o `HDD`): `2 GB`** (tanto de tamaño total como de espacio libre). Si intentas instalar o copiar `qInstall` en una unidad menor a **2 GB**, el programa **bloqueará la operación automáticamente**. Se recomiendan **`4 GB o más`** (`16 GB+` si deseas llevar muchos instaladores descargados offline).
 
 - **Sistema Operativo:** Windows 10 (`1809+`) o Windows 11 (`64-bit`), ejecutado con permisos UAC de Administrador (solicitados automáticamente).
 - **Sin dependencias externas:** Compilado sobre `.NET Framework 4.8` (incluido de fábrica en Windows 10/11) + librerías `WebView2` embebidas. Si el equipo no trae `Winget`, aparece un botón en la cabecera para instalarlo en un clic.
@@ -131,11 +131,11 @@ Cuando agregas un instalador propio con **`+ Local`**, puedes elegir una plantil
 
 ---
 
-## 🚀 Cómo llevarlo en tu Pendrive o Disco Externo
+## 🚀 Cómo llevarlo en tu USB, SSD o HDD
 
-1. Abre **`Qinstall.exe`**.
+1. Abre **`Qinstall.exe`** desde tu **USB, SSD o HDD** (o desde tu PC).
 2. Pulsa arriba a la derecha en **`Almacenamiento`**.
-3. En **Copiar qInstall a Otra Unidad**, elige tu pendrive USB o disco externo (mínimo **2 GB**, recomendado **4 GB+**) y haz clic en **`Copiar a unidad`**.
+3. En **Copiar qInstall a Otra Unidad**, elige cualquier **pendrive USB, SSD o HDD** disponible (mínimo **2 GB**, recomendado **4 GB+**) y haz clic en **`Copiar a unidad`**.
 
 <details>
 <summary><b>📂 Ver estructura portable que se copia en tu unidad</b></summary>
