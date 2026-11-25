@@ -743,12 +743,49 @@ function getSelectionPayload() {
   return { keys, onlineApps };
 }
 
+function getSelectedAppsInfo() {
+  const list = [];
+  for (const k of state.selectedKeys) {
+    if (state.selectedOnlineMap.has(k)) {
+      list.push(state.selectedOnlineMap.get(k));
+    } else {
+      const found = state.apps.find(a => a.key === k);
+      if (found) list.push(found);
+    }
+  }
+  return list;
+}
+
 function startOrCancelInstall() {
   if (state.isBusy) {
     postToHost({ action: 'cancel' });
     setStatusText('Cancelando operación...', parseInt(document.getElementById('statusPct').textContent, 10) || 0);
     return;
   }
+
+  const apps = getSelectedAppsInfo();
+  if (apps.length === 0) {
+    showToast('Selecciona al menos una aplicación para instalar.', 'warn');
+    return;
+  }
+
+  const silent = document.getElementById('chkSilent').checked;
+  const upgrade = document.getElementById('chkUpgrade').checked;
+  const rows = apps.map(a => {
+    const modeTag = a.hasOffline && !a.requiresInternet ? 'OFFLINE' : (a.source === 'powershell' ? 'TOOL' : 'ONLINE');
+    return `<div class="dialog-row-ok">• ${escapeHtml(a.name)} <span style="opacity:0.65;">[${modeTag}]</span></div>`;
+  }).join('');
+
+  openDialogModal(
+    'Confirmar instalación',
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>instalar ${apps.length} ${apps.length === 1 ? 'aplicación' : 'aplicaciones'}</b> en este equipo?<br><span style="font-size:11.5px; color:var(--text-muted);">Instalación silenciosa: <b>${silent ? 'Sí' : 'No'}</b> · Actualizar si ya existe: <b>${upgrade ? 'Sí' : 'No'}</b></span></p><div class="dialog-list">${rows}</div>`,
+    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
+     <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedInstall()">Sí, instalar ahora (${apps.length})</button>`
+  );
+}
+
+function executeConfirmedInstall() {
+  closeDialogModal();
   const sel = getSelectionPayload();
   postToHost({
     action: 'installSelected',
@@ -761,6 +798,30 @@ function startOrCancelInstall() {
 
 function startOfflineDownload() {
   if (state.isBusy) return;
+
+  const apps = getSelectedAppsInfo();
+  if (apps.length === 0) {
+    showToast('Marca las aplicaciones que deseas descargar para tu pendrive.', 'warn');
+    return;
+  }
+
+  const rows = apps.map(a => {
+    const isTool = a.source === 'powershell';
+    const cls = isTool ? 'dialog-row-warn' : 'dialog-row-ok';
+    const note = isTool ? ' (se omitirá: solo interactiva)' : '';
+    return `<div class="${cls}">• ${escapeHtml(a.name)}${note}</div>`;
+  }).join('');
+
+  openDialogModal(
+    'Confirmar descarga offline',
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>descargar los instaladores</b> de estas ${apps.length} ${apps.length === 1 ? 'opción' : 'opciones'} en tu carpeta <b>local\\cache\\</b> para llevarlos offline en el pendrive?<br><span style="font-size:11.5px; color:var(--text-muted);">No se instalarán en esta PC; solo se guardarán los archivos instaladores.</span></p><div class="dialog-list">${rows}</div>`,
+    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
+     <button class="btn-offline-dl" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedOfflineDownload()">Sí, descargar offline (${apps.length})</button>`
+  );
+}
+
+function executeConfirmedOfflineDownload() {
+  closeDialogModal();
   const sel = getSelectionPayload();
   postToHost({
     action: 'downloadOffline',
