@@ -39,8 +39,8 @@
       <p class="loader-subtitle">Iniciando entorno y comprobando paquetes del sistema...</p>
 
       <div class="nyan-progress-track" style="margin-bottom: 16px; max-width: 380px;">
-        <div class="nyan-rainbow-fill" id="loaderBar" style="width: 0%;"></div>
-        <div class="nyan-cat-runner" id="loaderNyanRunner" style="left: 0%;">
+        <div class="nyan-rainbow-fill" id="loaderBar" style="width: 0px;"></div>
+        <div class="nyan-cat-runner" id="loaderNyanRunner" style="left: 16px;">
           <svg class="nyan-cat-sprite" viewBox="0 0 34 22" xmlns="http://www.w3.org/2000/svg">
             <rect x="0" y="10" width="4" height="3" fill="#999" />
             <rect x="2" y="8" width="3" height="3" fill="#999" />
@@ -311,11 +311,12 @@
           </div>
 
           <div class="footer-checkboxes">
-            <label class="checkbox-label">
+            <label class="checkbox-label" title="Instala sin mostrar ventanas de 'Siguiente -> Instalar' usando --silent o parámetros silenciosos">
               <input type="checkbox" id="chkSilent" checked>
               <span>Instalación silenciosa</span>
+              <button type="button" class="silent-help-btn" onclick="event.preventDefault(); event.stopPropagation(); showSilentParamsHelpModal()" title="¿Qué son los parámetros silenciosos?">?</button>
             </label>
-            <label class="checkbox-label">
+            <label class="checkbox-label" title="Si una app ya está instalada, comprueba e instala su última versión vía Winget">
               <input type="checkbox" id="chkUpgrade" checked>
               <span>Actualizar si ya existe</span>
             </label>
@@ -626,6 +627,21 @@
                 <option value="/quiet /norestart">EXE estándar (/quiet /norestart)</option>
               </select>
             </div>
+          </div>
+
+          <div class="silent-help-box">
+            <div style="font-weight:700; color:var(--text-primary); margin-bottom:3px; display:flex; align-items:center; gap:6px;">
+              <i data-lucide="help-circle" style="width:13px;height:13px;color:var(--primary);"></i>
+              <span>¿Para qué sirven los parámetros silenciosos?</span>
+            </div>
+            <div>Permiten que el programa se instale <b>solo en segundo plano</b> sin pedirte pulsar <i>«Siguiente → Acepto → Finalizar»</i>:</div>
+            <div class="silent-help-grid">
+              <span><code>/S</code> → Instaladores NSIS (7-Zip, VLC, Dev-C++)</span>
+              <span><code>/VERYSILENT /NORESTART</code> → Inno Setup</span>
+              <span><code>/qn /norestart</code> → Archivos <code>.msi</code> (automático)</span>
+              <span><code>/quiet /norestart</code> → Instaladores Microsoft</span>
+            </div>
+            <div style="margin-top:3px; opacity:0.85;">Si no conoces el tipo de instalador o prefieres ver sus ventanas normales, <b>déjalo vacío</b>.</div>
           </div>
 
           <label class="checkbox-label">

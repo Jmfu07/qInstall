@@ -163,10 +163,28 @@ function postToHost(payload) {
   }
 }
 
+let iconRafId = null;
 function refreshIcons() {
-  if (window.lucide && typeof window.lucide.createIcons === 'function') {
-    window.lucide.createIcons();
+  if (iconRafId) return;
+  iconRafId = requestAnimationFrame(() => {
+    iconRafId = null;
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
+  });
+}
+
+function applyNyanBarPosition(bar, runner, pct) {
+  const safe = Math.max(0, Math.min(100, Number(pct) || 0));
+  if (safe <= 0.05) {
+    if (bar) bar.style.width = '0px';
+    if (runner) runner.style.left = '16px';
+    return;
   }
+  // Anclar el borde derecho del arcoiris exactamente al cuerpo del gato (misma coordenada CSS)
+  const pos = `clamp(16px, ${safe.toFixed(2)}%, calc(100% - 16px))`;
+  if (bar) bar.style.width = pos;
+  if (runner) runner.style.left = pos;
 }
 
 function escapeHtml(str) {
@@ -325,8 +343,7 @@ function startSmoothLoader(waitForBackend) {
       pct = 95;
     }
 
-    if (bar) bar.style.width = pct.toFixed(2) + '%';
-    if (runner) runner.style.left = `clamp(16px, ${pct.toFixed(2)}%, calc(100% - 16px))`;
+    applyNyanBarPosition(bar, runner, pct);
 
     const dotIdx = pct < 25 ? 0 : (pct < 55 ? 1 : (pct < 85 ? 2 : 3));
     if (dotIdx !== lastDot) {
@@ -355,8 +372,7 @@ function startSmoothLoader(waitForBackend) {
     }
 
     if (elapsed >= LOADER_DURATION_MS && (!waitForBackend || loaderState.backendReady)) {
-      if (bar) bar.style.width = '100%';
-      if (runner) runner.style.left = '100%';
+      applyNyanBarPosition(bar, runner, 100);
       loaderState.running = false;
       loaderState.rafId = null;
       setTimeout(() => {
@@ -1199,16 +1215,78 @@ function requestRefresh() { postToHost({ action: 'refresh' }); }
 function requestInstallWinget() { postToHost({ action: 'installWinget' }); }
 function requestRunAsAdmin() { postToHost({ action: 'runAsAdmin' }); }
 
+const progressSim = {
+  rafId: null,
+  lastTs: 0,
+  displayPct: 0,
+  floorPct: 0,
+  ceilingPct: 0
+};
+
+function renderFooterProgressFrame(pct) {
+  const bar = document.getElementById('statusProgress');
+  const runner = document.getElementById('nyanRunner');
+  const pctEl = document.getElementById('statusPct');
+  applyNyanBarPosition(bar, runner, pct);
+  if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+}
+
+function tickFooterProgress(now) {
+  if (!progressSim.lastTs) progressSim.lastTs = now;
+  const dt = Math.min(0.1, (now - progressSim.lastTs) / 1000);
+  progressSim.lastTs = now;
+
+  // 1. Si el progreso real del backend es mayor que el mostrado, deslizar suavemente hacia arriba
+  if (progressSim.displayPct < progressSim.floorPct) {
+    const diff = progressSim.floorPct - progressSim.displayPct;
+    progressSim.displayPct += Math.max(diff * Math.min(1, dt * 8.5), dt * 22);
+    if (progressSim.displayPct > progressSim.floorPct) {
+      progressSim.displayPct = progressSim.floorPct;
+    }
+  } else if (state.isBusy && progressSim.displayPct < progressSim.ceilingPct) {
+    // 2. Mientras descarga/instala en segundo plano, avanzar poco a poco (1% -> 2% -> ...) sin quedarse congelado
+    const remaining = progressSim.ceilingPct - progressSim.displayPct;
+    // Velocidad inicial ~1.5%/seg que desacelera asintóticamente al acercarse al techo del paso actual
+    const speed = Math.max(0.22, Math.min(1.6, remaining * 0.055));
+    progressSim.displayPct = Math.min(progressSim.ceilingPct, progressSim.displayPct + speed * dt);
+  }
+
+  renderFooterProgressFrame(progressSim.displayPct);
+
+  const stillCatchingUp = Math.abs(progressSim.floorPct - progressSim.displayPct) > 0.15;
+  if (state.isBusy || stillCatchingUp) {
+    progressSim.rafId = requestAnimationFrame(tickFooterProgress);
+  } else {
+    renderFooterProgressFrame(progressSim.floorPct);
+    progressSim.rafId = null;
+    progressSim.lastTs = 0;
+  }
+}
+
+function ensureFooterProgressLoop() {
+  if (!progressSim.rafId) {
+    progressSim.lastTs = 0;
+    progressSim.rafId = requestAnimationFrame(tickFooterProgress);
+  }
+}
+
 function setBusyState(busy, mode) {
+  const wasBusy = state.isBusy;
   state.isBusy = busy;
   const btnInstall = document.getElementById('btnInstall');
   const lbl = document.getElementById('btnInstallLabel');
   const btnDl = document.getElementById('btnDownloadOffline');
 
   if (busy) {
+    if (!wasBusy) {
+      progressSim.displayPct = 0;
+      progressSim.floorPct = 1;
+      progressSim.ceilingPct = 90;
+    }
     btnInstall.classList.add('cancel-mode');
     lbl.textContent = 'Cancelar';
     btnDl.style.display = 'none';
+    ensureFooterProgressLoop();
   } else {
     btnInstall.classList.remove('cancel-mode');
     lbl.textContent = 'Instalar seleccionadas';
@@ -1218,16 +1296,71 @@ function setBusyState(busy, mode) {
 
 function setStatusText(text, pct) {
   const span = document.getElementById('statusMessageText');
-  const bar = document.getElementById('statusProgress');
-  const runner = document.getElementById('nyanRunner');
-  const pctEl = document.getElementById('statusPct');
   if (span && text) span.textContent = text;
-  if (typeof pct === 'number') {
-    const safe = Math.max(0, Math.min(100, pct));
-    if (bar) bar.style.width = safe + '%';
-    if (runner) runner.style.left = `clamp(16px, ${safe}%, calc(100% - 16px))`;
-    if (pctEl) pctEl.textContent = safe + '%';
+  if (typeof pct !== 'number') return;
+
+  const safe = Math.max(0, Math.min(100, pct));
+
+  if (!state.isBusy) {
+    if (safe === 0) {
+      progressSim.displayPct = 0;
+      progressSim.floorPct = 0;
+      progressSim.ceilingPct = 0;
+      if (progressSim.rafId) {
+        cancelAnimationFrame(progressSim.rafId);
+        progressSim.rafId = null;
+      }
+      renderFooterProgressFrame(0);
+      return;
+    }
+    progressSim.floorPct = safe;
+    progressSim.ceilingPct = safe;
+    ensureFooterProgressLoop();
+    return;
   }
+
+  // Calcular el tramo del paso actual si el texto incluye "(i/N)" (ej. "Instalando (1/3): ...")
+  let stepCeiling = Math.min(94, Math.max(safe + 18, 90));
+  const m = String(text || '').match(/\((\d+)\s*\/\s*(\d+)\)/);
+  if (m) {
+    const idx = parseInt(m[1], 10);
+    const total = Math.max(1, parseInt(m[2], 10));
+    const sliceStart = ((idx - 1) / total) * 100;
+    const sliceEnd = (idx / total) * 100;
+    stepCeiling = sliceStart + (sliceEnd - sliceStart) * 0.9;
+  }
+
+  // Arrancar al menos en 1% al iniciar una operación para dar feedback visual inmediato
+  const effectiveFloor = Math.max(safe, progressSim.displayPct < 1 ? 1 : safe);
+  if (effectiveFloor > progressSim.displayPct) {
+    progressSim.floorPct = effectiveFloor;
+  } else {
+    progressSim.floorPct = Math.max(progressSim.floorPct, safe);
+  }
+  progressSim.ceilingPct = Math.max(progressSim.floorPct, Math.min(96, stepCeiling));
+  ensureFooterProgressLoop();
+}
+
+function showSilentParamsHelpModal() {
+  openDialogModal(
+    '¿Qué son los parámetros silenciosos?',
+    `<div style="font-size:13px; color:var(--text-secondary); display:flex; flex-direction:column; gap:10px; line-height:1.5;">
+      <p>La <b>Instalación silenciosa</b> permite que los programas se instalen automáticamente en segundo plano sin abrir asistentes ni pedirte pulsar <i>«Siguiente → Acepto → Instalar → Finalizar»</i>.</p>
+      <div class="dialog-list" style="font-size:11.5px;">
+        <div class="dialog-row-ok">• <b>Apps de Winget:</b> qInstall aplica <code>--silent</code> automáticamente (no necesitas configurar nada).</div>
+        <div class="dialog-row-ok">• <b>Instaladores descargados offline:</b> qInstall lee el parámetro oficial del manifiesto <code>.yaml</code> automáticamente.</div>
+        <div class="dialog-row-warn">• <b>Tus propios archivos .exe / .msi (+ Local):</b> cada fabricante usa un comando distinto:</div>
+        <div style="padding-left:12px; color:var(--text-secondary);">
+          <code>/S</code> → NSIS (7-Zip, VLC, Notepad++, Dev-C++)<br>
+          <code>/VERYSILENT /NORESTART</code> → Inno Setup<br>
+          <code>/qn /norestart</code> → Paquetes <code>.msi</code> (qInstall lo pone solo)<br>
+          <code>/quiet /norestart</code> → Instaladores Microsoft
+        </div>
+      </div>
+      <p style="font-size:11.5px; color:var(--text-muted);">Si desmarcas <b>Instalación silenciosa</b> abajo, verás las ventanas normales del instalador (útil si quieres cambiar la carpeta de destino de un programa).</p>
+    </div>`,
+    `<button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="closeDialogModal()">Entendido</button>`
+  );
 }
 
 /* ==========================================================================
