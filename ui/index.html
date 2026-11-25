@@ -238,9 +238,6 @@
         <button class="btn-view active" id="viewBtnCards" onclick="switchView('cards')" title="Galería" aria-label="Galería">
           <i data-lucide="images" style="width: 18px; height: 18px;"></i>
         </button>
-        <button class="btn-view" id="viewBtnGallery" onclick="switchView('gallery')" title="Cuadrícula" aria-label="Cuadrícula">
-          <i data-lucide="layout-grid" style="width: 18px; height: 18px;"></i>
-        </button>
         <button class="btn-view" id="viewBtnTable" onclick="switchView('table')" title="Tabla" aria-label="Tabla">
           <i data-lucide="table-2" style="width: 18px; height: 18px;"></i>
         </button>
@@ -262,13 +259,8 @@
     <!-- BARRA PERSISTENTE DE CATEGORÍAS (SIEMPRE VISIBLE EN TODAS LAS VISTAS) -->
     <nav class="gallery-cat-bar persistent-cat-bar" id="galleryCatBar" aria-label="Categorías"></nav>
 
-    <!-- VISTA CUADRÍCULA -->
+    <!-- VISTA GALERÍA -->
     <main class="app-content" id="appGrid"></main>
-
-    <!-- VISTA GALERÍA ADAPTATIVA -->
-    <section class="app-gallery-container" id="appGalleryContainer" style="display: none;">
-      <div class="gallery-grid" id="galleryGrid"></div>
-    </section>
 
     <!-- VISTA TABLA DENSA -->
     <div class="app-table-container" id="appTableContainer">

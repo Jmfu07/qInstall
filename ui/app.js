@@ -33,7 +33,7 @@ const state = {
   searchQuery: '',
   searchSeq: 0,
   searchTimer: null,
-  viewMode: localStorage.getItem('qinstall_view') || 'cards',
+  viewMode: localStorage.getItem('qinstall_view') === 'table' ? 'table' : 'cards',
   galleryCategory: '',
   themeMode: localStorage.getItem('qinstall_theme') || 'dark',
   contextKey: null
@@ -615,8 +615,6 @@ function renderActiveView() {
 
   if (state.viewMode === 'table') {
     renderTableView(visible);
-  } else if (state.viewMode === 'gallery') {
-    renderGalleryView(visible);
   } else {
     renderCardsView(getCategoryFilteredApps(filtered));
   }
@@ -629,61 +627,8 @@ function selectGalleryCategory(cat) {
   renderActiveView();
   const scrollTarget = state.viewMode === 'table'
     ? document.getElementById('appTableContainer')
-    : (state.viewMode === 'gallery'
-      ? document.getElementById('appGalleryContainer')
-      : document.getElementById('appGrid'));
+    : document.getElementById('appGrid');
   if (scrollTarget) scrollTarget.scrollTop = 0;
-}
-
-function renderGalleryView(items) {
-  const grid = document.getElementById('galleryGrid');
-  if (!grid) return;
-
-  if (items.length === 0) {
-    grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:32px; color:var(--text-muted);">Sin aplicaciones para mostrar.</div>`;
-    return;
-  }
-
-  grid.innerHTML = items.map(app => {
-    const isSel = state.selectedKeys.has(app.key);
-    const isOnline = !!app.isOnlineSearch;
-    const cat = app.category || 'Otros';
-    const catKey = cat.toLowerCase();
-    const iconName = CATEGORY_ICONS[catKey] || 'box';
-    const [c1, c2] = CATEGORY_GRADIENTS[catKey] || ['#4f46e5', '#8b5cf6'];
-    const badgesHtml = getBadgesHtml(app);
-    const tip = escapeHtml(getAppTooltip(app));
-    const encKey = encodeJsArg(app.key);
-    const ctxAttr = isOnline ? '' : `oncontextmenu="openContextMenu(event, decodeURIComponent('${encKey}'))"`;
-    const saveBtn = isOnline
-      ? `<button class="btn-quick-save" title="Guardar en tu catálogo" onclick="event.stopPropagation(); quickSaveOnline(decodeURIComponent('${encKey}'))">+</button>`
-      : '';
-    const desc = app.description || app.target || 'Aplicación de Windows';
-    const appIconSrc = getAppIconSrc(app);
-    const tileHtml = appIconSrc
-      ? `<div class="gallery-icon-tile has-app-logo"><img src="${appIconSrc}" alt="" loading="lazy" decoding="async" onerror="this.parentElement.classList.remove('has-app-logo'); this.parentElement.style.background='linear-gradient(135deg, ${c1}, ${c2})'; this.remove();"><i data-lucide="${iconName}" class="gallery-fallback-svg" style="width:24px;height:24px;"></i></div>`
-      : `<div class="gallery-icon-tile" style="background: linear-gradient(135deg, ${c1}, ${c2});"><i data-lucide="${iconName}" style="width:24px;height:24px;"></i></div>`;
-
-    return `
-      <article class="gallery-card ${isSel ? 'selected' : ''}" data-key="${escapeHtml(app.key)}" title="${tip}"
-               onclick="toggleAppSelection(decodeURIComponent('${encKey}'), ${isOnline})" ${ctxAttr}>
-        <div class="gallery-banner" style="background: linear-gradient(135deg, ${c1}26, ${c2}1c);">
-          ${tileHtml}
-          <div class="gallery-check-pos">
-            ${saveBtn}
-            <div class="custom-checkbox">${CHECK_SVG}</div>
-          </div>
-        </div>
-        <div class="gallery-card-body">
-          <div class="gallery-card-title">${escapeHtml(app.name)}</div>
-          <div class="gallery-card-desc">${escapeHtml(desc)}</div>
-          <div class="gallery-card-footer">
-            <span class="gallery-cat-mini">${escapeHtml(cat)}</span>
-            ${badgesHtml}
-          </div>
-        </div>
-      </article>`;
-  }).join('');
 }
 
 function renderAllViews() {
@@ -896,7 +841,7 @@ function toggleAppSelection(key, isOnlineSearch) {
 }
 
 function syncSelectionVisuals() {
-  document.querySelectorAll('.app-row, .table-row, .gallery-card').forEach(el => {
+  document.querySelectorAll('.app-row, .table-row').forEach(el => {
     const k = el.getAttribute('data-key');
     const isSel = state.selectedKeys.has(k);
     el.classList.toggle('selected', isSel);
@@ -946,14 +891,13 @@ function updateInstallButtonLabel() {
 }
 
 function switchView(mode, persist = true) {
-  state.viewMode = mode;
-  localStorage.setItem('qinstall_view', mode);
-  document.getElementById('appGrid').style.display = mode === 'cards' ? 'grid' : 'none';
-  document.getElementById('appGalleryContainer').style.display = mode === 'gallery' ? 'flex' : 'none';
-  document.getElementById('appTableContainer').style.display = mode === 'table' ? 'flex' : 'none';
-  document.getElementById('viewBtnCards').classList.toggle('active', mode === 'cards');
-  document.getElementById('viewBtnGallery').classList.toggle('active', mode === 'gallery');
-  document.getElementById('viewBtnTable').classList.toggle('active', mode === 'table');
+  const safeMode = mode === 'table' ? 'table' : 'cards';
+  state.viewMode = safeMode;
+  localStorage.setItem('qinstall_view', safeMode);
+  document.getElementById('appGrid').style.display = safeMode === 'cards' ? 'grid' : 'none';
+  document.getElementById('appTableContainer').style.display = safeMode === 'table' ? 'flex' : 'none';
+  document.getElementById('viewBtnCards').classList.toggle('active', safeMode === 'cards');
+  document.getElementById('viewBtnTable').classList.toggle('active', safeMode === 'table');
   if (state.apps.length > 0) {
     renderActiveView();
     if (persist) persistPortableProfiles();
@@ -1514,8 +1458,8 @@ function applyPortableProfiles(p) {
     localStorage.setItem('qinstall_theme', p.theme);
     applyTheme(p.theme);
   }
-  if (p.viewMode && (p.viewMode === 'cards' || p.viewMode === 'gallery' || p.viewMode === 'table')) {
-    switchView(p.viewMode, false);
+  if (p.viewMode) {
+    switchView(p.viewMode === 'table' ? 'table' : 'cards', false);
   }
 }
 
