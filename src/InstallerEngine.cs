@@ -797,6 +797,18 @@ namespace Qinstall
             if (id == "sumatrapdf") return AnyNameStartsWith(installedNames, "SumatraPDF");
             if (id == "adobereader") return AnyNameStartsWith(installedNames, "Adobe Acrobat") || AnyNameStartsWith(installedNames, "Adobe Reader");
             if (id == "obsidian") return AnyNameEqualsOrPrefix(installedNames, "Obsidian");
+            if (id == "chatgpt") return AnyNameEqualsOrPrefix(installedNames, "ChatGPT");
+            if (id == "claude") return AnyNameEqualsOrPrefix(installedNames, "Claude") && !AnyExactPrefixOnly(installedNames, "Claude Code", "Claude Science");
+            if (id == "claude_code") return AnyNameStartsWith(installedNames, "Claude Code");
+            if (id == "cursor") return AnyNameEqualsOrPrefix(installedNames, "Cursor");
+            if (id == "windsurf") return AnyNameEqualsOrPrefix(installedNames, "Windsurf");
+            if (id == "trae") return AnyNameEqualsOrPrefix(installedNames, "Trae");
+            if (id == "perplexity_comet") return AnyNameEqualsOrPrefix(installedNames, "Comet") || AnyNameStartsWith(installedNames, "Perplexity");
+            if (id == "ollama") return AnyNameEqualsOrPrefix(installedNames, "Ollama");
+            if (id == "lmstudio") return AnyNameStartsWith(installedNames, "LM Studio");
+            if (id == "jan_ai") return AnyNameEqualsOrPrefix(installedNames, "Jan");
+            if (id == "cherry_studio") return AnyNameStartsWith(installedNames, "Cherry Studio");
+            if (id == "comfyui") return AnyNameStartsWith(installedNames, "ComfyUI");
             if (id == "gemini") return AnyNameEqualsOrPrefix(installedNames, "Google Gemini") || AnyNameEqualsOrPrefix(installedNames, "Gemini");
             if (id == "antigravity") return AnyNameEqualsOrPrefix(installedNames, "Antigravity") && !AnyExactPrefixOnly(installedNames, "Antigravity IDE", "Antigravity CLI");
             if (id == "antigravity_ide") return AnyNameStartsWith(installedNames, "Antigravity IDE");

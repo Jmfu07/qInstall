@@ -532,12 +532,62 @@
       "Essential": false
     },
     {
+      "Id": "chatgpt",
+      "Name": "ChatGPT",
+      "Category": "IA y Agentes",
+      "Description": "Aplicacion oficial de escritorio de OpenAI ChatGPT",
+      "Source": "winget",
+      "Target": "OpenAI.ChatGPT",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "codex_cli",
+      "Name": "OpenAI Codex CLI",
+      "Category": "IA y Agentes",
+      "Description": "Agente de programacion OpenAI Codex en terminal",
+      "Source": "winget",
+      "Target": "OpenAI.Codex",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "claude",
+      "Name": "Claude Desktop",
+      "Category": "IA y Agentes",
+      "Description": "Aplicacion oficial de escritorio de Anthropic Claude",
+      "Source": "winget",
+      "Target": "Anthropic.Claude",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "claude_code",
+      "Name": "Claude Code",
+      "Category": "IA y Agentes",
+      "Description": "Agente de programacion Claude Code en terminal",
+      "Source": "winget",
+      "Target": "Anthropic.ClaudeCode",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "gemini",
       "Name": "Google Gemini",
       "Category": "IA y Agentes",
       "Description": "Aplicacion de escritorio de Google Gemini",
       "Source": "winget",
       "Target": "Google.GeminiDesktop",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "gemini_cli",
+      "Name": "Gemini API CLI",
+      "Category": "IA y Agentes",
+      "Description": "Interfaz de linea de comandos oficial de Gemini",
+      "Source": "winget",
+      "Target": "Google.GeminiAPICLI",
       "SilentArgs": "",
       "Essential": false
     },
@@ -608,6 +658,96 @@
       "Description": "GitHub Copilot en linea de comandos",
       "Source": "winget",
       "Target": "GitHub.Copilot",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "cursor",
+      "Name": "Cursor",
+      "Category": "IA y Agentes",
+      "Description": "Editor de codigo nativo con IA y agentes",
+      "Source": "winget",
+      "Target": "Anysphere.Cursor",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "windsurf",
+      "Name": "Windsurf",
+      "Category": "IA y Agentes",
+      "Description": "IDE con agente Cascade de Codeium",
+      "Source": "winget",
+      "Target": "Codeium.Windsurf",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "trae",
+      "Name": "Trae AI IDE",
+      "Category": "IA y Agentes",
+      "Description": "IDE adaptativo con agentes de IA",
+      "Source": "winget",
+      "Target": "ByteDance.Trae",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "perplexity_comet",
+      "Name": "Perplexity Comet",
+      "Category": "IA y Agentes",
+      "Description": "Navegador y asistente de investigacion con IA de Perplexity",
+      "Source": "winget",
+      "Target": "Perplexity.Comet",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "ollama",
+      "Name": "Ollama",
+      "Category": "IA y Agentes",
+      "Description": "Ejecuta modelos LLM locales (Llama, DeepSeek, Qwen, Gemma)",
+      "Source": "winget",
+      "Target": "Ollama.Ollama",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "lmstudio",
+      "Name": "LM Studio",
+      "Category": "IA y Agentes",
+      "Description": "App visual para descargar y correr modelos IA locales offline",
+      "Source": "winget",
+      "Target": "ElementLabs.LMStudio",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "jan_ai",
+      "Name": "Jan AI",
+      "Category": "IA y Agentes",
+      "Description": "Chat de IA local de codigo abierto 100% privado",
+      "Source": "winget",
+      "Target": "Jan.Jan",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "cherry_studio",
+      "Name": "Cherry Studio",
+      "Category": "IA y Agentes",
+      "Description": "Cliente multi-IA (ChatGPT, Gemini, Claude, DeepSeek, Ollama)",
+      "Source": "winget",
+      "Target": "kangfenmao.CherryStudio",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "comfyui",
+      "Name": "ComfyUI Desktop",
+      "Category": "IA y Agentes",
+      "Description": "Generacion local de imagenes y video con IA por nodos",
+      "Source": "winget",
+      "Target": "Comfy.ComfyUI-Desktop",
       "SilentArgs": "",
       "Essential": false
     },

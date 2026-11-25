@@ -311,7 +311,12 @@ namespace Qinstall
                 Make("obsidian", "Obsidian", "Oficina", "Notas personales en Markdown", "winget", "Obsidian.Obsidian", false),
 
                 // IA y Agentes
+                Make("chatgpt", "ChatGPT", "IA y Agentes", "Aplicacion oficial de escritorio de OpenAI ChatGPT", "winget", "OpenAI.ChatGPT", false),
+                Make("codex_cli", "OpenAI Codex CLI", "IA y Agentes", "Agente de programacion OpenAI Codex en terminal", "winget", "OpenAI.Codex", false),
+                Make("claude", "Claude Desktop", "IA y Agentes", "Aplicacion oficial de escritorio de Anthropic Claude", "winget", "Anthropic.Claude", false),
+                Make("claude_code", "Claude Code", "IA y Agentes", "Agente de programacion Claude Code en terminal", "winget", "Anthropic.ClaudeCode", false),
                 Make("gemini", "Google Gemini", "IA y Agentes", "Aplicacion de escritorio de Google Gemini", "winget", "Google.GeminiDesktop", false),
+                Make("gemini_cli", "Gemini API CLI", "IA y Agentes", "Interfaz de linea de comandos oficial de Gemini", "winget", "Google.GeminiAPICLI", false),
                 Make("antigravity", "Google Antigravity", "IA y Agentes", "Plataforma y agente Google Antigravity", "winget", "Google.Antigravity", false),
                 Make("antigravity_ide", "Antigravity IDE", "IA y Agentes", "Entorno de desarrollo Antigravity IDE", "winget", "Google.AntigravityIDE", false),
                 Make("antigravity_cli", "Antigravity CLI", "IA y Agentes", "Interfaz de comandos de Antigravity", "winget", "Google.AntigravityCLI", false),
@@ -319,6 +324,15 @@ namespace Qinstall
                 Make("opencode_cli", "OpenCode CLI", "IA y Agentes", "Agente de programacion OpenCode en terminal", "winget", "Anomaly.OpenCode", false),
                 Make("copilot_app", "GitHub Copilot", "IA y Agentes", "Aplicacion oficial de GitHub Copilot", "winget", "GitHub.CopilotApp", false),
                 Make("copilot_cli", "GitHub Copilot CLI", "IA y Agentes", "GitHub Copilot en linea de comandos", "winget", "GitHub.Copilot", false),
+                Make("cursor", "Cursor", "IA y Agentes", "Editor de codigo nativo con IA y agentes", "winget", "Anysphere.Cursor", false),
+                Make("windsurf", "Windsurf", "IA y Agentes", "IDE con agente Cascade de Codeium", "winget", "Codeium.Windsurf", false),
+                Make("trae", "Trae AI IDE", "IA y Agentes", "IDE adaptativo con agentes de IA", "winget", "ByteDance.Trae", false),
+                Make("perplexity_comet", "Perplexity Comet", "IA y Agentes", "Navegador y asistente de investigacion con IA de Perplexity", "winget", "Perplexity.Comet", false),
+                Make("ollama", "Ollama", "IA y Agentes", "Ejecuta modelos LLM locales (Llama, DeepSeek, Qwen, Gemma)", "winget", "Ollama.Ollama", false),
+                Make("lmstudio", "LM Studio", "IA y Agentes", "App visual para descargar y correr modelos IA locales offline", "winget", "ElementLabs.LMStudio", false),
+                Make("jan_ai", "Jan AI", "IA y Agentes", "Chat de IA local de codigo abierto 100% privado", "winget", "Jan.Jan", false),
+                Make("cherry_studio", "Cherry Studio", "IA y Agentes", "Cliente multi-IA (ChatGPT, Gemini, Claude, DeepSeek, Ollama)", "winget", "kangfenmao.CherryStudio", false),
+                Make("comfyui", "ComfyUI Desktop", "IA y Agentes", "Generacion local de imagenes y video con IA por nodos", "winget", "Comfy.ComfyUI-Desktop", false),
 
                 // Desarrollo
                 Make("vscode", "Visual Studio Code", "Desarrollo", "Editor de codigo moderno de Microsoft", "winget", "Microsoft.VisualStudioCode", true),
