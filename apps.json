@@ -362,6 +362,126 @@
       "Essential": false
     },
     {
+      "Id": "restore_point",
+      "Name": "Crear Punto de Restauracion",
+      "Category": "Soporte y Drivers",
+      "Description": "Crea un punto de restauracion en Windows antes de optimizar o instalar drivers",
+      "Source": "powershell",
+      "Target": "Write-Host '=== Creando Punto de Restauracion (Qinstall) ===' -ForegroundColor Cyan; Enable-ComputerRestore -Drive ($env:SystemDrive + '\\') -ErrorAction SilentlyContinue; Checkpoint-Computer -Description ('Qinstall_' + (Get-Date -Format 'yyyyMMdd_HHmm')) -RestorePointType 'MODIFY_SETTINGS'; Write-Host 'Punto de restauracion creado correctamente.' -ForegroundColor Green; Read-Host 'Presiona Enter para cerrar'",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "hwinfo",
+      "Name": "HWiNFO64",
+      "Category": "Soporte y Drivers",
+      "Description": "Diagnostico avanzado de hardware, temperaturas y sensores en tiempo real",
+      "Source": "winget",
+      "Target": "REALiX.HWiNFO",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "gpuz",
+      "Name": "GPU-Z",
+      "Category": "Soporte y Drivers",
+      "Description": "Informacion detallada y sensores de la tarjeta grafica (NVIDIA/AMD/Intel)",
+      "Source": "winget",
+      "Target": "TechPowerUp.GPU-Z",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "ddu",
+      "Name": "DDU (Display Driver Uninstaller)",
+      "Category": "Soporte y Drivers",
+      "Description": "Desinstalador limpio y profundo de drivers de video NVIDIA, AMD e Intel",
+      "Source": "winget",
+      "Target": "Wagnardsoft.DisplayDriverUninstaller",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "msi_afterburner",
+      "Name": "MSI Afterburner",
+      "Category": "Soporte y Drivers",
+      "Description": "Control de ventiladores, monitor OSD en juegos y ajuste de GPU",
+      "Source": "winget",
+      "Target": "Guru3D.Afterburner",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "intel_dsa",
+      "Name": "Intel Driver & Support Assistant",
+      "Category": "Soporte y Drivers",
+      "Description": "Detecta y actualiza automaticamente drivers oficiales de Intel",
+      "Source": "winget",
+      "Target": "Intel.IntelDriverAndSupportAssistant",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "malwarebytes",
+      "Name": "Malwarebytes",
+      "Category": "Soporte y Drivers",
+      "Description": "Escaner antimalware y limpieza profunda de amenazas en Windows",
+      "Source": "winget",
+      "Target": "Malwarebytes.Malwarebytes",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "anydesk",
+      "Name": "AnyDesk",
+      "Category": "Soporte y Drivers",
+      "Description": "Escritorio remoto ligero y rapido para soporte tecnico",
+      "Source": "winget",
+      "Target": "AnyDesk.AnyDesk",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "teamviewer",
+      "Name": "TeamViewer",
+      "Category": "Soporte y Drivers",
+      "Description": "Asistencia y control remoto multiplataforma",
+      "Source": "winget",
+      "Target": "TeamViewer.TeamViewer",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "parsec",
+      "Name": "Parsec",
+      "Category": "Soporte y Drivers",
+      "Description": "Acceso remoto de baja latencia y alta fluidez",
+      "Source": "winget",
+      "Target": "Parsec.Parsec",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "bitwarden",
+      "Name": "Bitwarden",
+      "Category": "Soporte y Drivers",
+      "Description": "Gestor de contraseñas seguro y de codigo abierto",
+      "Source": "winget",
+      "Target": "Bitwarden.Bitwarden",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
+      "Id": "keepassxc",
+      "Name": "KeePassXC",
+      "Category": "Soporte y Drivers",
+      "Description": "Gestor de contraseñas 100% offline y cifrado local",
+      "Source": "winget",
+      "Target": "KeePassXCTeam.KeePassXC",
+      "SilentArgs": "",
+      "Essential": false
+    },
+    {
       "Id": "vlc",
       "Name": "VLC Media Player",
       "Category": "Multimedia",

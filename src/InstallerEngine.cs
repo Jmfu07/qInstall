@@ -386,6 +386,8 @@ namespace Qinstall
             Dictionary<string, OfflineCacheUpdateInfo> outdated = new Dictionary<string, OfflineCacheUpdateInfo>(StringComparer.OrdinalIgnoreCase);
             if (apps == null || apps.Count == 0) return outdated;
 
+            List<AppItem> candidates = new List<AppItem>();
+            List<string> localVersions = new List<string>();
             for (int i = 0; i < apps.Count; i++)
             {
                 AppItem app = apps[i];
@@ -395,20 +397,169 @@ namespace Qinstall
 
                 string localVer = GetCachedOfflineVersion(app);
                 if (string.IsNullOrEmpty(localVer)) continue;
+                candidates.Add(app);
+                localVersions.Add(localVer);
+            }
 
-                string latestVer = await GetWingetLatestVersionAsync(app.Target);
-                if (IsVersionOlder(localVer, latestVer))
+            if (candidates.Count == 0) return outdated;
+
+            // Optimizacion: consultar hasta 4 paquetes Winget en paralelo para acelerar el arranque
+            object dictLock = new object();
+            using (SemaphoreSlim sem = new SemaphoreSlim(4, 4))
+            {
+                List<Task> tasks = new List<Task>();
+                for (int i = 0; i < candidates.Count; i++)
                 {
-                    string key = (app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty);
-                    OfflineCacheUpdateInfo info = new OfflineCacheUpdateInfo();
-                    info.App = app;
-                    info.LocalVersion = localVer;
-                    info.LatestVersion = latestVer;
-                    outdated[key] = info;
+                    AppItem app = candidates[i];
+                    string localVer = localVersions[i];
+                    tasks.Add(Task.Run(async delegate
+                    {
+                        await sem.WaitAsync();
+                        try
+                        {
+                            string latestVer = await GetWingetLatestVersionAsync(app.Target);
+                            if (IsVersionOlder(localVer, latestVer))
+                            {
+                                string key = (app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty);
+                                OfflineCacheUpdateInfo info = new OfflineCacheUpdateInfo();
+                                info.App = app;
+                                info.LocalVersion = localVer;
+                                info.LatestVersion = latestVer;
+                                lock (dictLock)
+                                {
+                                    outdated[key] = info;
+                                }
+                            }
+                        }
+                        finally
+                        {
+                            sem.Release();
+                        }
+                    }));
                 }
+                await Task.WhenAll(tasks.ToArray());
             }
 
             return outdated;
+        }
+
+        public static long GetDirectorySizeBytes(string dir)
+        {
+            long total = 0;
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return 0;
+            try
+            {
+                string[] files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
+                for (int i = 0; i < files.Length; i++)
+                {
+                    try { total += new FileInfo(files[i]).Length; } catch { }
+                }
+            }
+            catch { }
+            return total;
+        }
+
+        public static long GetOfflineCacheSizeBytes(AppItem app)
+        {
+            string installerPath = FindCachedInstallerPath(app);
+            if (string.IsNullOrEmpty(installerPath)) return 0;
+            string dir = Path.GetDirectoryName(installerPath);
+            return GetDirectorySizeBytes(dir);
+        }
+
+        public static long DeleteSingleOfflineCache(AppItem app)
+        {
+            long freed = 0;
+            string installerPath = FindCachedInstallerPath(app);
+            string cacheDir = !string.IsNullOrEmpty(installerPath)
+                ? Path.GetDirectoryName(installerPath)
+                : GetOfflineCacheDirForApp(app);
+            if (string.IsNullOrEmpty(cacheDir) || !Directory.Exists(cacheDir)) return 0;
+            freed = GetDirectorySizeBytes(cacheDir);
+            try { Directory.Delete(cacheDir, true); } catch { }
+            return freed;
+        }
+
+        public async Task<InstallResult> UninstallAppAsync(AppItem app, bool silent)
+        {
+            if (app == null || string.IsNullOrWhiteSpace(app.Target))
+            {
+                return MakeResult(app, InstallStatus.Failed, "Aplicacion invalida para desinstalar");
+            }
+            string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src != "winget")
+            {
+                return MakeResult(app, InstallStatus.Failed, "La desinstalacion automatica solo aplica a apps Winget/Store");
+            }
+
+            EmitLog("--------------------------------------------------");
+            EmitLog("[*] Desinstalando: " + app.Name + " (" + app.Target + ")");
+            string pkgSource = GetWingetSourceName(app.Target);
+            string silentFlag = silent ? " --silent" : string.Empty;
+            string args = string.Format(
+                "uninstall --id \"{0}\" --exact --source {1}{2} --accept-source-agreements --disable-interactivity",
+                app.Target.Trim(),
+                pkgSource,
+                silentFlag);
+
+            StringBuilder output = new StringBuilder();
+            int exitCode = await RunProcessAsync("winget", args, output);
+            if (_cancelRequested)
+            {
+                return MakeResult(app, InstallStatus.Cancelled, "Desinstalacion cancelada");
+            }
+            if (exitCode == 0)
+            {
+                EmitLog("[OK] " + app.Name + " desinstalada correctamente.");
+                return MakeResult(app, InstallStatus.Success, "Desinstalada correctamente");
+            }
+            EmitLog(string.Format("[X] Error desinstalando {0} (codigo {1}).", app.Name, exitCode));
+            return MakeResult(app, InstallStatus.Failed, "Error de Winget al desinstalar (codigo " + exitCode + ")");
+        }
+
+        public async Task<int> UpgradeAllInstalledAsync(bool silent)
+        {
+            EmitLog("--------------------------------------------------");
+            EmitLog("[*] Buscando y aplicando actualizaciones de todas las apps instaladas (winget upgrade --all)...");
+            string silentFlag = silent ? " --silent" : string.Empty;
+            string args = "upgrade --all --source winget" + silentFlag + " --accept-package-agreements --accept-source-agreements --disable-interactivity";
+            StringBuilder output = new StringBuilder();
+            int code = await RunProcessAsync("winget", args, output);
+            if (_cancelRequested)
+            {
+                EmitLog("[!] Actualizacion masiva cancelada por el usuario.");
+                return -2;
+            }
+            if (code == 0 || code == -1978335189)
+            {
+                EmitLog("[OK] Actualizacion masiva finalizada.");
+                return 0;
+            }
+            EmitLog("[X] winget upgrade --all finalizo con codigo: " + code);
+            return code;
+        }
+
+        public async Task<bool> CreateSystemRestorePointAsync(string description)
+        {
+            string safeDesc = string.IsNullOrWhiteSpace(description)
+                ? ("Qinstall_" + DateTime.Now.ToString("yyyyMMdd_HHmm"))
+                : description.Replace("'", string.Empty).Replace("\"", string.Empty).Trim();
+
+            EmitLog("--------------------------------------------------");
+            EmitLog("[*] Creando punto de restauracion de Windows: " + safeDesc);
+            string script = string.Format(
+                "Enable-ComputerRestore -Drive ($env:SystemDrive + '\\') -ErrorAction SilentlyContinue; Checkpoint-Computer -Description '{0}' -RestorePointType 'MODIFY_SETTINGS'",
+                safeDesc);
+            string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+            StringBuilder output = new StringBuilder();
+            int code = await RunProcessAsync("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded, output);
+            if (code == 0)
+            {
+                EmitLog("[OK] Punto de restauracion '" + safeDesc + "' creado correctamente.");
+                return true;
+            }
+            EmitLog("[X] No se pudo crear el punto de restauracion (codigo " + code + "). Verifica proteccion del sistema o frecuencia de 24h de Windows.");
+            return false;
         }
 
         private static string ExtractSilentArgsFromCachedYaml(string installerPath)
@@ -783,6 +934,17 @@ namespace Qinstall
             if (id == "aomei_partition") return AnyNameStartsWith(installedNames, "AOMEI Partition Assistant");
             if (id == "minitool_partition") return AnyNameStartsWith(installedNames, "MiniTool Partition Wizard");
             if (id == "ventoy") return AnyNameEqualsOrPrefix(installedNames, "Ventoy");
+            if (id == "hwinfo") return AnyNameStartsWith(installedNames, "HWiNFO");
+            if (id == "gpuz") return AnyNameStartsWith(installedNames, "TechPowerUp GPU-Z") || AnyNameEqualsOrPrefix(installedNames, "GPU-Z");
+            if (id == "ddu") return AnyNameStartsWith(installedNames, "Display Driver Uninstaller");
+            if (id == "msi_afterburner") return AnyNameStartsWith(installedNames, "MSI Afterburner");
+            if (id == "intel_dsa") return AnyNameStartsWith(installedNames, "Intel") && AnyNameMatchesAll(installedNames, "Intel", "Driver", "Support");
+            if (id == "malwarebytes") return AnyNameStartsWith(installedNames, "Malwarebytes");
+            if (id == "anydesk") return AnyNameEqualsOrPrefix(installedNames, "AnyDesk");
+            if (id == "teamviewer") return AnyNameEqualsOrPrefix(installedNames, "TeamViewer");
+            if (id == "parsec") return AnyNameEqualsOrPrefix(installedNames, "Parsec");
+            if (id == "bitwarden") return AnyNameEqualsOrPrefix(installedNames, "Bitwarden");
+            if (id == "keepassxc") return AnyNameStartsWith(installedNames, "KeePassXC");
             if (src == "powershell") return false;
             if (id == "vlc") return AnyNameStartsWith(installedNames, "VLC media player");
             if (id == "spotify") return AnyNameEqualsOrPrefix(installedNames, "Spotify") || AnyIdContains(installedIds, "SpotifyAB.SpotifyMusic");

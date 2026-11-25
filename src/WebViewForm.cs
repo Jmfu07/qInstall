@@ -195,6 +195,21 @@ namespace Qinstall
                     case "purgeOutdated":
                         HandlePurgeOutdated(msg);
                         break;
+                    case "deleteSingleCache":
+                        HandleDeleteSingleCache(GetStr(msg, "key"));
+                        break;
+                    case "uninstallApp":
+                        await HandleUninstallAppAsync(msg);
+                        break;
+                    case "upgradeAll":
+                        await HandleUpgradeAllAsync(msg);
+                        break;
+                    case "createRestorePoint":
+                        await HandleCreateRestorePointAsync();
+                        break;
+                    case "saveProfiles":
+                        HandleSaveProfiles(msg);
+                        break;
                     case "setWindowTheme":
                         ApplyNativeTitlebarTheme(GetBool(msg, "dark"));
                         break;
@@ -601,31 +616,35 @@ namespace Qinstall
             _isBusy = true;
             _engine.ResetCancellation();
             List<InstallResult> results = new List<InstallResult>();
-
-            for (int i = 0; i < selected.Count; i++)
+            try
             {
-                AppItem app = selected[i];
-                int basePct = (int)Math.Round(((double)i / selected.Count) * 100.0);
-                PostProgress(true, "install", basePct, string.Format("Instalando ({0}/{1}): {2}...", i + 1, selected.Count, app.Name));
-
-                InstallResult res = await _engine.InstallAppAsync(app, silent, upgrade);
-                results.Add(res);
-
-                if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                for (int i = 0; i < selected.Count; i++)
                 {
-                    string key = GetAppKey(app);
-                    bool isTool = string.Equals(app.Source, "powershell", StringComparison.OrdinalIgnoreCase);
-                    if (!isTool) _installedKeys.Add(key);
-                    PostAppUpdated(app, !isTool, InstallerEngine.HasOfflineCache(app), _outdatedCaches.ContainsKey(key), true);
+                    AppItem app = selected[i];
+                    int basePct = (int)Math.Round(((double)i / selected.Count) * 100.0);
+                    PostProgress(true, "install", basePct, string.Format("Instalando ({0}/{1}): {2}...", i + 1, selected.Count, app.Name));
+
+                    InstallResult res = await _engine.InstallAppAsync(app, silent, upgrade);
+                    results.Add(res);
+
+                    if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                    {
+                        string key = GetAppKey(app);
+                        bool isTool = string.Equals(app.Source, "powershell", StringComparison.OrdinalIgnoreCase);
+                        if (!isTool) _installedKeys.Add(key);
+                        PostAppUpdated(app, !isTool, InstallerEngine.HasOfflineCache(app), _outdatedCaches.ContainsKey(key), true);
+                    }
+
+                    if (res.Status == InstallStatus.Cancelled) break;
+
+                    int donePct = (int)Math.Round(((double)(i + 1) / selected.Count) * 100.0);
+                    PostProgress(true, "install", donePct, string.Format("Completado ({0}/{1}): {2}", i + 1, selected.Count, app.Name));
                 }
-
-                if (res.Status == InstallStatus.Cancelled) break;
-
-                int donePct = (int)Math.Round(((double)(i + 1) / selected.Count) * 100.0);
-                PostProgress(true, "install", donePct, string.Format("Completado ({0}/{1}): {2}", i + 1, selected.Count, app.Name));
             }
-
-            _isBusy = false;
+            finally
+            {
+                _isBusy = false;
+            }
             PostSummary(results, false);
         }
 
@@ -699,29 +718,34 @@ namespace Qinstall
             _isBusy = true;
             _engine.ResetCancellation();
             List<InstallResult> results = new List<InstallResult>();
-
-            for (int i = 0; i < downloadable.Count; i++)
+            try
             {
-                AppItem app = downloadable[i];
-                int pct = (int)Math.Round(((double)i / downloadable.Count) * 100.0);
-                PostProgress(true, "download", pct, string.Format("Descargando offline ({0}/{1}): {2}...", i + 1, downloadable.Count, app.Name));
-
-                InstallResult res = await _engine.DownloadForOfflineAsync(app);
-                results.Add(res);
-
-                if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                for (int i = 0; i < downloadable.Count; i++)
                 {
-                    string key = GetAppKey(app);
-                    _outdatedCaches.Remove(key);
-                    PostAppUpdated(app, _installedKeys.Contains(key), true, false, true);
+                    AppItem app = downloadable[i];
+                    int pct = (int)Math.Round(((double)i / downloadable.Count) * 100.0);
+                    PostProgress(true, "download", pct, string.Format("Descargando offline ({0}/{1}): {2}...", i + 1, downloadable.Count, app.Name));
+
+                    InstallResult res = await _engine.DownloadForOfflineAsync(app);
+                    results.Add(res);
+
+                    if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                    {
+                        string key = GetAppKey(app);
+                        _outdatedCaches.Remove(key);
+                        PostAppUpdated(app, _installedKeys.Contains(key), true, false, true);
+                    }
+
+                    if (res.Status == InstallStatus.Cancelled) break;
+                    int donePct = (int)Math.Round(((double)(i + 1) / downloadable.Count) * 100.0);
+                    PostProgress(true, "download", donePct, string.Format("Guardado offline ({0}/{1}): {2}", i + 1, downloadable.Count, app.Name));
                 }
-
-                if (res.Status == InstallStatus.Cancelled) break;
-                int donePct = (int)Math.Round(((double)(i + 1) / downloadable.Count) * 100.0);
-                PostProgress(true, "download", donePct, string.Format("Guardado offline ({0}/{1}): {2}", i + 1, downloadable.Count, app.Name));
             }
-
-            _isBusy = false;
+            finally
+            {
+                _isBusy = false;
+            }
+            PostStateUpdate();
             PostSummary(results, true);
         }
 
@@ -729,9 +753,16 @@ namespace Qinstall
         {
             if (_isBusy) return;
             _isBusy = true;
-            PostProgress(true, "install", 30, "Descargando e instalando Winget desde Microsoft...");
-            bool ok = await _engine.InstallWingetAsync();
-            _isBusy = false;
+            bool ok = false;
+            try
+            {
+                PostProgress(true, "install", 30, "Descargando e instalando Winget desde Microsoft...");
+                ok = await _engine.InstallWingetAsync();
+            }
+            finally
+            {
+                _isBusy = false;
+            }
             PostProgress(false, "idle", ok ? 100 : 0, ok ? "Winget instalado correctamente." : "No se pudo instalar Winget.");
             if (ok)
             {
@@ -741,6 +772,229 @@ namespace Qinstall
             {
                 PostToast("No se pudo instalar Winget automaticamente.", "warn");
             }
+        }
+
+        private void HandleDeleteSingleCache(string key)
+        {
+            if (_isBusy || string.IsNullOrWhiteSpace(key)) return;
+            List<AppItem> all = GetAllApps();
+            AppItem target = null;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (string.Equals(GetAppKey(all[i]), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = all[i];
+                    break;
+                }
+            }
+            if (target == null) return;
+
+            long freed = InstallerEngine.DeleteSingleOfflineCache(target);
+            _outdatedCaches.Remove(key);
+            PostStateUpdate();
+            double mb = freed / (1024.0 * 1024.0);
+            string msg = string.Format("Instalador descargado de '{0}' eliminado ({1:0.0} MB liberados).", target.Name, mb);
+            PostLog(msg, "success");
+            PostToast(msg, "success");
+        }
+
+        private async Task HandleUninstallAppAsync(Dictionary<string, object> msg)
+        {
+            if (_isBusy) return;
+            string key = GetStr(msg, "key");
+            bool silent = GetBool(msg, "silent", true);
+            if (string.IsNullOrWhiteSpace(key)) return;
+
+            List<AppItem> all = GetAllApps();
+            AppItem target = null;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (string.Equals(GetAppKey(all[i]), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = all[i];
+                    break;
+                }
+            }
+            if (target == null) return;
+
+            if (!_wingetAvailable)
+            {
+                PostToast("Winget no esta disponible para desinstalar.", "warn");
+                return;
+            }
+
+            _isBusy = true;
+            _engine.ResetCancellation();
+            InstallResult res;
+            try
+            {
+                PostProgress(true, "install", 30, "Desinstalando " + target.Name + "...");
+                res = await _engine.UninstallAppAsync(target, silent);
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+
+            if (res.Status == InstallStatus.Success)
+            {
+                _installedKeys.Remove(key);
+                PostAppUpdated(target, false, InstallerEngine.HasOfflineCache(target), _outdatedCaches.ContainsKey(key), true);
+                PostProgress(false, "idle", 100, target.Name + " desinstalada correctamente.");
+                PostToast(target.Name + " desinstalada correctamente.", "success");
+            }
+            else if (res.Status == InstallStatus.Cancelled)
+            {
+                PostProgress(false, "idle", 0, "Desinstalacion cancelada.");
+                PostToast("Desinstalacion cancelada.", "warn");
+            }
+            else
+            {
+                PostProgress(false, "idle", 0, "No se pudo desinstalar " + target.Name + ".");
+                PostToast("No se pudo desinstalar " + target.Name + ": " + res.Message, "warn");
+            }
+        }
+
+        private async Task HandleUpgradeAllAsync(Dictionary<string, object> msg)
+        {
+            if (_isBusy) return;
+            bool silent = GetBool(msg, "silent", true);
+
+            PostProgress(false, "idle", 0, "Verificando red y Winget...");
+            bool onlineNow = await InstallerEngine.CheckInternetAsync();
+            _hasInternet = onlineNow;
+            if (!onlineNow)
+            {
+                PostStateUpdate();
+                PostToast("Necesitas conexion a Internet para actualizar las apps instaladas.", "warn");
+                return;
+            }
+            if (!_wingetAvailable)
+            {
+                PostToast("Winget no esta disponible en este equipo.", "warn");
+                return;
+            }
+
+            _isBusy = true;
+            _engine.ResetCancellation();
+            int code = -1;
+            try
+            {
+                PostProgress(true, "install", 35, "Actualizando todas las aplicaciones instaladas via Winget...");
+                code = await _engine.UpgradeAllInstalledAsync(silent);
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+
+            if (code == -2)
+            {
+                PostProgress(false, "idle", 0, "Actualizacion masiva cancelada.");
+                PostToast("Actualizacion masiva cancelada.", "warn");
+                return;
+            }
+
+            PostProgress(false, "idle", 100, code == 0 ? "Actualizacion masiva completada." : "Actualizacion finalizada con avisos.");
+            PostToast(code == 0 ? "Todas las aplicaciones compatibles fueron actualizadas." : "Actualizacion completada (revisa el registro para detalles).", code == 0 ? "success" : "info");
+            await HandleRefreshAsync();
+        }
+
+        private async Task HandleCreateRestorePointAsync()
+        {
+            if (_isBusy) return;
+            _isBusy = true;
+            _engine.ResetCancellation();
+            bool ok = false;
+            try
+            {
+                PostProgress(true, "install", 40, "Creando punto de restauracion de Windows...");
+                ok = await _engine.CreateSystemRestorePointAsync("Qinstall_" + DateTime.Now.ToString("yyyyMMdd_HHmm"));
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+
+            PostProgress(false, "idle", ok ? 100 : 0, ok ? "Punto de restauracion creado." : "No se pudo crear el punto de restauracion.");
+            PostToast(
+                ok ? "Punto de restauracion creado correctamente en Windows." : "Windows no permitio crear el punto ahora (revisa el registro o proteccion del sistema).",
+                ok ? "success" : "warn");
+        }
+
+        private void HandleSaveProfiles(Dictionary<string, object> msg)
+        {
+            try
+            {
+                Dictionary<string, object> data = new Dictionary<string, object>();
+                data["activePreset"] = GetStr(msg, "activePreset");
+                data["customApps"] = GetStringList(msg, "customApps");
+                data["silent"] = GetBool(msg, "silent", true);
+                data["upgrade"] = GetBool(msg, "upgrade", true);
+                data["theme"] = GetStr(msg, "theme");
+                data["viewMode"] = GetStr(msg, "viewMode");
+                data["updatedAt"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+
+                string path = AppCatalog.GetProfilesPath();
+                string json = _json.Serialize(data);
+                File.WriteAllText(path, json, new UTF8Encoding(false));
+                PostLog("Perfiles portables guardados en: " + path, "success");
+            }
+            catch (Exception ex)
+            {
+                PostLog("[!] No se pudo guardar profiles.json: " + ex.Message, "warn");
+            }
+        }
+
+        private Dictionary<string, object> LoadPortableProfiles()
+        {
+            try
+            {
+                string path = AppCatalog.GetProfilesPath();
+                if (File.Exists(path))
+                {
+                    string raw = File.ReadAllText(path, Encoding.UTF8);
+                    Dictionary<string, object> parsed = _json.Deserialize<Dictionary<string, object>>(raw);
+                    if (parsed != null) return parsed;
+                }
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
+        private Dictionary<string, object> BuildStorageInfo()
+        {
+            string localDir = AppCatalog.GetLocalInstallersDirectory();
+            string cacheDir = Path.Combine(localDir, "cache");
+            long cacheBytes = InstallerEngine.GetDirectorySizeBytes(cacheDir);
+            long driveFree = 0;
+            long driveTotal = 0;
+            string driveName = string.Empty;
+            try
+            {
+                string root = Path.GetPathRoot(AppCatalog.GetAppBaseDirectory());
+                if (!string.IsNullOrEmpty(root))
+                {
+                    DriveInfo di = new DriveInfo(root);
+                    if (di.IsReady)
+                    {
+                        driveFree = di.AvailableFreeSpace;
+                        driveTotal = di.TotalSize;
+                        driveName = string.IsNullOrWhiteSpace(di.VolumeLabel) ? di.Name : (di.VolumeLabel + " (" + di.Name.TrimEnd('\\') + ")");
+                    }
+                }
+            }
+            catch { }
+
+            return new Dictionary<string, object>
+            {
+                { "cacheTotalBytes", cacheBytes },
+                { "driveFreeBytes", driveFree },
+                { "driveTotalBytes", driveTotal },
+                { "driveName", driveName }
+            };
         }
 
         private void OpenLocalFolder()
@@ -918,6 +1172,7 @@ namespace Qinstall
                 bool hasOffline = InstallerEngine.HasOfflineCache(app);
                 bool reqNet = InstallerEngine.AppRequiresInternet(app);
                 string cachedVer = hasOffline ? InstallerEngine.GetCachedOfflineVersion(app) : string.Empty;
+                long cachedSize = hasOffline ? InstallerEngine.GetOfflineCacheSizeBytes(app) : 0;
 
                 OfflineCacheUpdateInfo upd;
                 bool isOutdated = _outdatedCaches.TryGetValue(key, out upd);
@@ -937,15 +1192,17 @@ namespace Qinstall
                     { "hasOffline", hasOffline },
                     { "requiresInternet", reqNet },
                     { "cachedVersion", cachedVer ?? string.Empty },
+                    { "cachedSizeBytes", cachedSize },
                     { "outdated", isOutdated },
                     { "latestVersion", isOutdated ? upd.LatestVersion : string.Empty }
                 });
             }
 
-            PostMessage(new Dictionary<string, object>
+            Dictionary<string, object> statePayload = new Dictionary<string, object>
             {
                 { "type", "stateUpdate" },
                 { "apps", appDtos },
+                { "storage", BuildStorageInfo() },
                 { "env", new Dictionary<string, object>
                     {
                         { "hasInternet", _hasInternet },
@@ -957,7 +1214,13 @@ namespace Qinstall
                         { "outdatedCount", _outdatedCaches.Count }
                     }
                 }
-            });
+            };
+            Dictionary<string, object> portableProfiles = LoadPortableProfiles();
+            if (portableProfiles != null)
+            {
+                statePayload["profiles"] = portableProfiles;
+            }
+            PostMessage(statePayload);
         }
 
         private void PostAppUpdated(AppItem app, bool installed, bool hasOffline, bool outdated, bool uncheck)
@@ -971,6 +1234,7 @@ namespace Qinstall
                 { "hasOffline", hasOffline },
                 { "requiresInternet", InstallerEngine.AppRequiresInternet(app) },
                 { "cachedVersion", hasOffline ? InstallerEngine.GetCachedOfflineVersion(app) : string.Empty },
+                { "cachedSizeBytes", hasOffline ? InstallerEngine.GetOfflineCacheSizeBytes(app) : 0 },
                 { "outdated", outdated },
                 { "uncheck", uncheck }
             });

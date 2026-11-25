@@ -13,3 +13,5 @@ office/Office/
 bin/
 obj/
 .vs/
+
+profiles.json

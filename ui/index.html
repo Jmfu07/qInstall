@@ -254,6 +254,10 @@
       </div>
 
       <div class="toolbar-tools">
+        <button class="btn-tool" onclick="confirmUpgradeAll()" title="Actualizar todas las aplicaciones instaladas vía Winget">
+          <i data-lucide="arrow-up-circle" style="width: 14px; height: 14px;"></i>
+          <span>Actualizar todo</span>
+        </button>
         <button class="btn-tool local-tool" onclick="requestAddLocalInstaller()" title="Agregar un .exe o .msi local para usar sin Internet">
           <i data-lucide="folder-plus" style="width: 14px; height: 14px;"></i>
           <span>+ Instalador local</span>
@@ -393,7 +397,16 @@
 
   <!-- MENÚ CONTEXTUAL CLIC DERECHO -->
   <div class="context-menu" id="appContextMenu">
-    <button class="context-item" id="ctxRemoveBtn">
+    <button class="context-item warn" id="ctxUninstallBtn" style="display: none;">
+      <i data-lucide="package-x" style="width: 14px; height: 14px;"></i>
+      <span id="ctxUninstallLabel">Desinstalar aplicación</span>
+    </button>
+    <button class="context-item warn" id="ctxDeleteCacheBtn" style="display: none;">
+      <i data-lucide="hard-drive" style="width: 14px; height: 14px;"></i>
+      <span id="ctxDeleteCacheLabel">Eliminar instalador descargado</span>
+    </button>
+    <div class="context-sep" id="ctxExtraSep" style="display: none;"></div>
+    <button class="context-item danger" id="ctxRemoveBtn">
       <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
       <span id="ctxRemoveLabel">Quitar del catálogo</span>
     </button>
@@ -411,7 +424,7 @@
       </div>
       <div class="modal-body">
         <div class="settings-group">
-          <div class="settings-group-title">Motor de Despliegue</div>
+          <div class="settings-group-title">Motor de Despliegue &amp; Seguridad</div>
           <label class="settings-toggle-row">
             <div>
               <div class="settings-label">Instalación silenciosa por defecto</div>
@@ -426,11 +439,25 @@
             </div>
             <input type="checkbox" id="setUpgrade" checked class="settings-switch">
           </label>
+          <div class="settings-actions-row" style="margin-top: 4px;">
+            <button class="btn-tool" onclick="confirmCreateRestorePoint()"><i data-lucide="shield-check" style="width: 14px;"></i> Crear punto de restauración</button>
+            <button class="btn-tool" onclick="toggleSettingsModal(); confirmUpgradeAll();"><i data-lucide="arrow-up-circle" style="width: 14px;"></i> Actualizar todas las apps</button>
+          </div>
         </div>
 
         <div class="settings-group">
-          <div class="settings-group-title">Carpeta Local Offline (Pendrive)</div>
-          <div class="settings-desc">Los archivos .exe/.msi colocados aquí se detectan automáticamente y funcionan sin Internet:</div>
+          <div class="settings-group-title">Almacenamiento &amp; Carpeta Local (Pendrive)</div>
+          <div class="storage-card" id="storageSummaryBox">
+            <div class="storage-meta">
+              <span id="storageDriveLabel">Unidad actual</span>
+              <span id="storageCacheLabel" style="font-family:'Cascadia Code', monospace; color: var(--primary);">Caché: 0 MB</span>
+            </div>
+            <div class="storage-bar-track"><div class="storage-bar-fill" id="storageBarFill" style="width: 0%;"></div></div>
+            <div class="storage-meta" style="font-size: 11px; color: var(--text-muted);">
+              <span id="storageFreeLabel">Libre: —</span>
+              <span>Perfiles portables: profiles.json</span>
+            </div>
+          </div>
           <div class="settings-path-box" id="settingsLocalPath">local\</div>
           <div class="settings-actions-row">
             <button class="btn-tool" onclick="postToHost({ action: 'openLocalFolder' })"><i data-lucide="folder-open" style="width: 14px;"></i> Abrir carpeta local\</button>
@@ -439,11 +466,14 @@
         </div>
 
         <div class="settings-group">
-          <div class="settings-group-title">Instaladores Descargados &amp; Apariencia</div>
-          <div class="settings-desc">Si sale una nueva versión de un instalador guardado en el pendrive, conviene purgar el antiguo para evitar conflictos.</div>
+          <div class="settings-group-title">Gestor de Instaladores Descargados &amp; Apariencia</div>
+          <div class="settings-desc">Elimina un instalador puntual para liberar espacio en el pendrive, o purga los obsoletos si salió una versión nueva:</div>
+          <div class="cached-list" id="cachedAppsManager">
+            <div style="font-size:11.5px; color:var(--text-muted); padding:6px;">No hay instaladores descargados en local\cache\.</div>
+          </div>
           <div class="settings-actions-row">
-            <button class="btn-tool" onclick="postToHost({ action: 'purgeOutdated' })"><i data-lucide="sparkles" style="width: 14px;"></i> Purgar instaladores obsoletos</button>
-            <button class="btn-tool" onclick="confirmPurgeOfflineCache()"><i data-lucide="trash-2" style="width: 14px;"></i> Eliminar instaladores descargados</button>
+            <button class="btn-tool" onclick="postToHost({ action: 'purgeOutdated' })"><i data-lucide="sparkles" style="width: 14px;"></i> Purgar obsoletos</button>
+            <button class="btn-tool" onclick="confirmPurgeOfflineCache()"><i data-lucide="trash-2" style="width: 14px;"></i> Eliminar todos</button>
             <button class="btn-tool" onclick="replayLoadingScreen()"><i data-lucide="play-circle" style="width: 14px;"></i> Ver Pantalla de Carga</button>
           </div>
         </div>

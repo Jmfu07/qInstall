@@ -44,6 +44,7 @@ const CATEGORY_GRADIENTS = {
   'utilidades': ['#4f46e5', '#8b5cf6'],
   'optimizacion': ['#d97706', '#f59e0b'],
   'arranque y reparacion': ['#dc2626', '#f97316'],
+  'soporte y drivers': ['#059669', '#0ea5e9'],
   'multimedia': ['#db2777', '#ec4899'],
   'comunicacion': ['#059669', '#10b981'],
   'oficina': ['#0284c7', '#3b82f6'],
@@ -64,6 +65,7 @@ const CATEGORY_ICONS = {
   'optimización': 'gauge',
   'arranque y reparacion': 'hard-drive',
   'arranque y reparación': 'hard-drive',
+  'soporte y drivers': 'shield-check',
   'multimedia': 'film',
   'comunicacion': 'message-square',
   'comunicación': 'message-square',
@@ -196,7 +198,13 @@ if (window.chrome && window.chrome.webview) {
       case 'stateUpdate':
         state.apps = msg.apps || [];
         state.env = msg.env || state.env;
+        if (msg.storage) state.storage = msg.storage;
+        if (msg.profiles && !state.portableProfilesLoaded) {
+          state.portableProfilesLoaded = true;
+          applyPortableProfiles(msg.profiles);
+        }
         updateEnvHeader();
+        updateStorageSettingsView();
         if (loaderState.running) {
           // Diferir el renderizado para no trabar la animacion fluida del loader
           setTimeout(() => {
@@ -748,6 +756,7 @@ function applySingleAppUpdate(msg) {
     app.hasOffline = !!msg.hasOffline;
     app.requiresInternet = !!msg.requiresInternet;
     app.cachedVersion = msg.cachedVersion || '';
+    if (typeof msg.cachedSizeBytes === 'number') app.cachedSizeBytes = msg.cachedSizeBytes;
     app.outdated = !!msg.outdated;
   }
   if (msg.uncheck) {
@@ -755,6 +764,7 @@ function applySingleAppUpdate(msg) {
     state.selectedOnlineMap.delete(msg.key);
   }
   renderAllViews();
+  updateStorageSettingsView();
   updateCounter();
 }
 
@@ -869,21 +879,23 @@ function applyEssentialPreset(presetKey) {
   currentEssentialApps = [...ESSENTIAL_PRESETS[presetKey]];
   localStorage.setItem('qinstall_active_preset', presetKey);
   localStorage.setItem('qinstall_essentials_list', JSON.stringify(currentEssentialApps));
+  persistPortableProfiles();
   updatePresetBadge();
   renderEssentialsPicker();
   document.getElementById('filterEssentials').classList.remove('active');
   toggleEssentials();
   document.getElementById('essentialsMenu').classList.remove('show');
-  showToast(`Perfil "${presetKey}" aplicado (${state.selectedKeys.size} por instalar).`, 'info');
+  showToast(`Perfil "${presetKey}" aplicado y guardado en profiles.json (${state.selectedKeys.size} por instalar).`, 'info');
 }
 
 function saveCustomEssentials() {
   localStorage.setItem('qinstall_active_preset', currentPresetName);
   localStorage.setItem('qinstall_essentials_list', JSON.stringify(currentEssentialApps));
+  persistPortableProfiles();
   document.getElementById('filterEssentials').classList.remove('active');
   toggleEssentials();
   document.getElementById('essentialsMenu').classList.remove('show');
-  showToast(`Esenciales guardados (${currentEssentialApps.length} apps).`, 'success');
+  showToast(`Esenciales guardados en profiles.json (${currentEssentialApps.length} apps).`, 'success');
 }
 
 function resetEssentialsToDefault() {
@@ -1095,18 +1107,191 @@ function appendLog(time, message, level) {
   body.scrollTop = body.scrollHeight;
 }
 
+function formatBytes(bytes) {
+  const n = Number(bytes || 0);
+  if (n <= 0) return '0 MB';
+  if (n >= 1024 * 1024 * 1024) return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  return Math.max(1, Math.round(n / 1024)) + ' KB';
+}
+
+function persistPortableProfiles() {
+  postToHost({
+    action: 'saveProfiles',
+    activePreset: currentPresetName,
+    customApps: currentEssentialApps,
+    silent: document.getElementById('chkSilent').checked,
+    upgrade: document.getElementById('chkUpgrade').checked,
+    theme: state.themeMode,
+    viewMode: state.viewMode
+  });
+}
+
+function applyPortableProfiles(p) {
+  if (!p) return;
+  if (p.activePreset) {
+    currentPresetName = p.activePreset;
+    localStorage.setItem('qinstall_active_preset', currentPresetName);
+  }
+  if (Array.isArray(p.customApps) && p.customApps.length > 0) {
+    currentEssentialApps = [...p.customApps];
+    localStorage.setItem('qinstall_essentials_list', JSON.stringify(currentEssentialApps));
+  }
+  if (typeof p.silent === 'boolean') document.getElementById('chkSilent').checked = p.silent;
+  if (typeof p.upgrade === 'boolean') document.getElementById('chkUpgrade').checked = p.upgrade;
+  if (p.theme && (p.theme === 'dark' || p.theme === 'light' || p.theme === 'system')) {
+    state.themeMode = p.theme;
+    localStorage.setItem('qinstall_theme', p.theme);
+    applyTheme(p.theme);
+  }
+  if (p.viewMode && (p.viewMode === 'cards' || p.viewMode === 'gallery' || p.viewMode === 'table')) {
+    switchView(p.viewMode);
+  }
+}
+
+function updateStorageSettingsView() {
+  const drvEl = document.getElementById('storageDriveLabel');
+  const cacheEl = document.getElementById('storageCacheLabel');
+  const freeEl = document.getElementById('storageFreeLabel');
+  const fillEl = document.getElementById('storageBarFill');
+  const listEl = document.getElementById('cachedAppsManager');
+  if (!drvEl || !listEl) return;
+
+  const st = state.storage || {};
+  const total = Number(st.driveTotalBytes || 0);
+  const free = Number(st.driveFreeBytes || 0);
+  const used = Math.max(0, total - free);
+  const usedPct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+
+  drvEl.textContent = st.driveName ? `Unidad: ${st.driveName}` : 'Unidad local';
+  cacheEl.textContent = `Instaladores descargados: ${formatBytes(st.cacheTotalBytes || 0)}`;
+  freeEl.textContent = total > 0 ? `Libre: ${formatBytes(free)} de ${formatBytes(total)} (${usedPct}% usado)` : 'Espacio no disponible';
+  if (fillEl) fillEl.style.width = usedPct + '%';
+
+  const cachedApps = state.apps.filter(a => a.hasOffline && Number(a.cachedSizeBytes || 0) > 0);
+  if (cachedApps.length === 0) {
+    listEl.innerHTML = '<div style="font-size:11.5px; color:var(--text-muted); padding:6px;">No hay instaladores descargados en local\\cache\\.</div>';
+    return;
+  }
+
+  cachedApps.sort((a, b) => (b.cachedSizeBytes || 0) - (a.cachedSizeBytes || 0));
+  listEl.innerHTML = cachedApps.map(app => {
+    const enc = encodeJsArg(app.key);
+    const ver = app.cachedVersion ? `v${escapeHtml(app.cachedVersion)} · ` : '';
+    const staleTag = app.outdated ? ' · OBSOLETO' : '';
+    return `
+      <div class="cached-item">
+        <div class="cached-item-info">
+          <span class="cached-item-name">${escapeHtml(app.name)}</span>
+          <span class="cached-item-sub">${ver}${formatBytes(app.cachedSizeBytes)}${staleTag}</span>
+        </div>
+        <button class="cached-del-btn" onclick="deleteSingleCachedApp(decodeURIComponent('${enc}'))">
+          <i data-lucide="trash-2" style="width:11px;height:11px;"></i> Eliminar
+        </button>
+      </div>`;
+  }).join('');
+  refreshIcons();
+}
+
+function deleteSingleCachedApp(key) {
+  if (state.isBusy) return;
+  postToHost({ action: 'deleteSingleCache', key });
+}
+
+function confirmUpgradeAll() {
+  if (state.isBusy) return;
+  if (!state.env.hasInternet) {
+    showToast('Se requiere Internet para actualizar las aplicaciones instaladas.', 'warn');
+    return;
+  }
+  if (!state.env.wingetAvailable) {
+    showToast('Winget no está disponible en este equipo.', 'warn');
+    return;
+  }
+  openDialogModal(
+    'Actualizar todas las aplicaciones',
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Deseas buscar y aplicar automáticamente todas las actualizaciones disponibles en este equipo mediante <b>winget upgrade --all</b>?<br><span style="font-size:11.5px; color:var(--text-muted);">Puedes ver el progreso en tiempo real en <b>Ver Registro</b> o cancelar en cualquier momento.</span></p>`,
+    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
+     <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedUpgradeAll()">Sí, actualizar todo</button>`
+  );
+}
+
+function executeConfirmedUpgradeAll() {
+  closeDialogModal();
+  postToHost({
+    action: 'upgradeAll',
+    silent: document.getElementById('chkSilent').checked
+  });
+}
+
+function confirmCreateRestorePoint() {
+  if (state.isBusy) return;
+  document.getElementById('settingsBackdrop').classList.remove('show');
+  openDialogModal(
+    'Crear punto de restauración',
+    `<p style="font-size:13px; color:var(--text-secondary);">Se creará un <b>punto de restauración de Windows</b> antes de instalar drivers u optimizadores (funciona 100% sin Internet).</p>`,
+    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
+     <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'createRestorePoint' })">Crear ahora</button>`
+  );
+}
+
+function confirmUninstallApp(key) {
+  const app = state.apps.find(a => a.key === key);
+  if (!app || state.isBusy) return;
+  const enc = encodeJsArg(key);
+  openDialogModal(
+    'Confirmar desinstalación',
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>desinstalar "${escapeHtml(app.name)}"</b> de este equipo vía Winget?</p>`,
+    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
+     <button class="btn-install cancel-mode" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="closeDialogModal(); postToHost({ action: 'uninstallApp', key: decodeURIComponent('${enc}'), silent: document.getElementById('chkSilent').checked })">Sí, desinstalar</button>`
+  );
+}
+
 function openContextMenu(e, key) {
   e.preventDefault();
   if (state.isBusy) return;
   const app = state.apps.find(a => a.key === key);
   if (!app) return;
   state.contextKey = key;
+
+  const canUninstall = !!app.installed && (app.source || 'winget') === 'winget';
+  const hasCache = !!app.hasOffline && Number(app.cachedSizeBytes || 0) > 0;
+
+  const unBtn = document.getElementById('ctxUninstallBtn');
+  const dcBtn = document.getElementById('ctxDeleteCacheBtn');
+  const sep = document.getElementById('ctxExtraSep');
+
+  unBtn.style.display = canUninstall ? 'flex' : 'none';
+  if (canUninstall) {
+    document.getElementById('ctxUninstallLabel').textContent = `Desinstalar "${app.name}"`;
+  }
+
+  dcBtn.style.display = hasCache ? 'flex' : 'none';
+  if (hasCache) {
+    document.getElementById('ctxDeleteCacheLabel').textContent = `Borrar descargado (${formatBytes(app.cachedSizeBytes)})`;
+  }
+
+  sep.style.display = (canUninstall || hasCache) ? 'block' : 'none';
   document.getElementById('ctxRemoveLabel').textContent = `Quitar "${app.name}" del catálogo`;
+
   const menu = document.getElementById('appContextMenu');
-  menu.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
-  menu.style.top = Math.min(e.clientY, window.innerHeight - 50) + 'px';
+  const menuHeight = 46 + (canUninstall ? 36 : 0) + (hasCache ? 36 : 0);
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 260) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - menuHeight - 12) + 'px';
   menu.classList.add('show');
 }
+
+document.getElementById('ctxUninstallBtn').addEventListener('click', () => {
+  const k = state.contextKey;
+  document.getElementById('appContextMenu').classList.remove('show');
+  if (k) confirmUninstallApp(k);
+});
+
+document.getElementById('ctxDeleteCacheBtn').addEventListener('click', () => {
+  const k = state.contextKey;
+  document.getElementById('appContextMenu').classList.remove('show');
+  if (k) deleteSingleCachedApp(k);
+});
 
 document.getElementById('ctxRemoveBtn').addEventListener('click', () => {
   const k = state.contextKey;
@@ -1122,6 +1307,7 @@ function toggleSettingsModal() {
   if (!modal.classList.contains('show')) {
     document.getElementById('setSilent').checked = document.getElementById('chkSilent').checked;
     document.getElementById('setUpgrade').checked = document.getElementById('chkUpgrade').checked;
+    updateStorageSettingsView();
   }
   modal.classList.toggle('show');
 }
@@ -1132,8 +1318,9 @@ function saveSettings() {
   document.getElementById('chkSilent').checked = silent;
   document.getElementById('chkUpgrade').checked = upgrade;
   localStorage.setItem('qinstall_prefs', JSON.stringify({ silent, upgrade }));
+  persistPortableProfiles();
   toggleSettingsModal();
-  showToast('Ajustes guardados.', 'success');
+  showToast('Ajustes guardados en profiles.json.', 'success');
 }
 
 function confirmPurgeOfflineCache() {

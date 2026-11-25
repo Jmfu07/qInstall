@@ -81,6 +81,11 @@ namespace Qinstall
             return Path.Combine(GetAppBaseDirectory(), "apps.json");
         }
 
+        public static string GetProfilesPath()
+        {
+            return Path.Combine(GetAppBaseDirectory(), "profiles.json");
+        }
+
         public static List<AppItem> DiscoverFolderLocalInstallers(AppCatalog existingCatalog)
         {
             List<AppItem> discovered = new List<AppItem>();
@@ -286,6 +291,20 @@ namespace Qinstall
                 Make("ventoy", "Ventoy", "Arranque y Reparacion", "Crea USB multiboot con ISOs de rescate y Windows", "winget", "Ventoy.Ventoy", false),
                 Make("repair_dism_sfc", "Reparar Windows (DISM + SFC)", "Arranque y Reparacion", "Repara archivos del sistema corruptos con DISM y SFC", "powershell", "Write-Host '=== Reparando imagen de Windows (DISM) ===' -ForegroundColor Cyan; DISM /Online /Cleanup-Image /RestoreHealth; Write-Host '=== Verificando archivos del sistema (SFC) ===' -ForegroundColor Cyan; sfc /scannow; Read-Host 'Presiona Enter para cerrar'", false),
                 Make("backup_bcd", "Ver/Respaldar Arranque (BCD)", "Arranque y Reparacion", "Lista entradas BCD y guarda respaldo automatico en Escritorio", "powershell", "Write-Host '=== Entradas de arranque actuales (BCDEdit) ===' -ForegroundColor Cyan; bcdedit /enum all; $bak = Join-Path $env:USERPROFILE ('Desktop\\BCD_Backup_' + (Get-Date -Format 'yyyyMMdd_HHmmss')); bcdedit /export $bak; Write-Host ('Respaldo BCD guardado en: ' + $bak) -ForegroundColor Green; Read-Host 'Presiona Enter para cerrar'", false),
+
+                // Soporte y Drivers
+                Make("restore_point", "Crear Punto de Restauracion", "Soporte y Drivers", "Crea un punto de restauracion en Windows antes de optimizar o instalar drivers", "powershell", "Write-Host '=== Creando Punto de Restauracion (Qinstall) ===' -ForegroundColor Cyan; Enable-ComputerRestore -Drive ($env:SystemDrive + '\\') -ErrorAction SilentlyContinue; Checkpoint-Computer -Description ('Qinstall_' + (Get-Date -Format 'yyyyMMdd_HHmm')) -RestorePointType 'MODIFY_SETTINGS'; Write-Host 'Punto de restauracion creado correctamente.' -ForegroundColor Green; Read-Host 'Presiona Enter para cerrar'", false),
+                Make("hwinfo", "HWiNFO64", "Soporte y Drivers", "Diagnostico avanzado de hardware, temperaturas y sensores en tiempo real", "winget", "REALiX.HWiNFO", false),
+                Make("gpuz", "GPU-Z", "Soporte y Drivers", "Informacion detallada y sensores de la tarjeta grafica (NVIDIA/AMD/Intel)", "winget", "TechPowerUp.GPU-Z", false),
+                Make("ddu", "DDU (Display Driver Uninstaller)", "Soporte y Drivers", "Desinstalador limpio y profundo de drivers de video NVIDIA, AMD e Intel", "winget", "Wagnardsoft.DisplayDriverUninstaller", false),
+                Make("msi_afterburner", "MSI Afterburner", "Soporte y Drivers", "Control de ventiladores, monitor OSD en juegos y ajuste de GPU", "winget", "Guru3D.Afterburner", false),
+                Make("intel_dsa", "Intel Driver & Support Assistant", "Soporte y Drivers", "Detecta y actualiza automaticamente drivers oficiales de Intel", "winget", "Intel.IntelDriverAndSupportAssistant", false),
+                Make("malwarebytes", "Malwarebytes", "Soporte y Drivers", "Escaner antimalware y limpieza profunda de amenazas en Windows", "winget", "Malwarebytes.Malwarebytes", false),
+                Make("anydesk", "AnyDesk", "Soporte y Drivers", "Escritorio remoto ligero y rapido para soporte tecnico", "winget", "AnyDesk.AnyDesk", false),
+                Make("teamviewer", "TeamViewer", "Soporte y Drivers", "Asistencia y control remoto multiplataforma", "winget", "TeamViewer.TeamViewer", false),
+                Make("parsec", "Parsec", "Soporte y Drivers", "Acceso remoto de baja latencia y alta fluidez", "winget", "Parsec.Parsec", false),
+                Make("bitwarden", "Bitwarden", "Soporte y Drivers", "Gestor de contraseñas seguro y de codigo abierto", "winget", "Bitwarden.Bitwarden", false),
+                Make("keepassxc", "KeePassXC", "Soporte y Drivers", "Gestor de contraseñas 100% offline y cifrado local", "winget", "KeePassXCTeam.KeePassXC", false),
 
                 // Multimedia
                 Make("vlc", "VLC Media Player", "Multimedia", "Reproductor universal de video y audio", "winget", "VideoLAN.VLC", true),
