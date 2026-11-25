@@ -1281,8 +1281,14 @@ namespace Qinstall
                     if (overallPct < lastReportedPct) overallPct = lastReportedPct;
                     lastReportedPct = overallPct;
 
-                    List<string> curNames = new List<string>(activeNames.Values);
-                    string runningLabel = curNames.Count > 0 ? string.Join(", ", curNames.ToArray()) : "Finalizando...";
+                    List<string> curLabels = new List<string>();
+                    foreach (KeyValuePair<string, string> kv in activeNames)
+                    {
+                        int p;
+                        activePcts.TryGetValue(kv.Key, out p);
+                        curLabels.Add(p > 0 ? string.Format("{0} ({1}%)", kv.Value, p) : kv.Value);
+                    }
+                    string runningLabel = curLabels.Count > 0 ? string.Join(" · ", curLabels.ToArray()) : "Finalizando...";
                     statusText = string.Format("Descargando ({0}/{1}): {2}", completed, total, runningLabel);
                 }
                 PostProgress(true, "download", overallPct, statusText);
@@ -1310,13 +1316,19 @@ namespace Qinstall
                                 }
                                 emitBatchProgress();
 
-                                int lastAppPct = -1;
+                                int lastAppPct = 0;
                                 InstallResult res = await _engine.DownloadForOfflineAsync(app, delegate(int pct)
                                 {
-                                    if (pct == lastAppPct) return;
-                                    if (lastAppPct >= 0 && Math.Abs(pct - lastAppPct) < 4 && pct < 100) return;
-                                    lastAppPct = pct;
-                                    lock (resLock) { activePcts[appKey] = pct; }
+                                    int clamped = Math.Max(0, Math.Min(100, pct));
+                                    if (clamped <= lastAppPct) return;
+                                    if (clamped - lastAppPct < 3 && clamped < 100) return;
+                                    lastAppPct = clamped;
+                                    lock (resLock)
+                                    {
+                                        int prev;
+                                        activePcts.TryGetValue(appKey, out prev);
+                                        if (clamped > prev) activePcts[appKey] = clamped;
+                                    }
                                     emitBatchProgress();
                                 });
 

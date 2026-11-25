@@ -1364,25 +1364,22 @@ function setStatusText(text, pct) {
     return;
   }
 
-  // Calcular el tramo del paso actual si el texto incluye "(i/N)" (ej. "Instalando (1/3): ...")
+  // Calcular el tramo del paso actual si el texto incluye "(i/N)" (ej. "Instalando (1/3)" o "Descargando (0/21)")
   let stepCeiling = Math.min(94, Math.max(safe + 18, 90));
   const m = String(text || '').match(/\((\d+)\s*\/\s*(\d+)\)/);
   if (m) {
     const idx = parseInt(m[1], 10);
     const total = Math.max(1, parseInt(m[2], 10));
-    const sliceStart = ((idx - 1) / total) * 100;
-    const sliceEnd = (idx / total) * 100;
+    const isCompletedCounter = idx === 0 || /^Descargando|^Iniciando descarga/i.test(String(text || ''));
+    const sliceStart = isCompletedCounter ? (idx / total) * 100 : ((idx - 1) / total) * 100;
+    const sliceEnd = isCompletedCounter ? (Math.min(total, idx + 1) / total) * 100 : (idx / total) * 100;
     stepCeiling = sliceStart + (sliceEnd - sliceStart) * 0.9;
   }
 
-  // Arrancar al menos en 1% al iniciar una operación para dar feedback visual inmediato
+  // Arrancar al menos en 1% al iniciar una operación para dar feedback visual inmediato (y nunca retroceder)
   const effectiveFloor = Math.max(safe, progressSim.displayPct < 1 ? 1 : safe);
-  if (effectiveFloor > progressSim.displayPct) {
-    progressSim.floorPct = effectiveFloor;
-  } else {
-    progressSim.floorPct = Math.max(progressSim.floorPct, safe);
-  }
-  progressSim.ceilingPct = Math.max(progressSim.floorPct, Math.min(96, stepCeiling));
+  progressSim.floorPct = Math.max(progressSim.floorPct, effectiveFloor);
+  progressSim.ceilingPct = Math.max(progressSim.floorPct, progressSim.displayPct, Math.min(96, stepCeiling));
   ensureFooterProgressLoop();
 }
 

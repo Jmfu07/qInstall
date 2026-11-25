@@ -2342,6 +2342,7 @@ namespace Qinstall
 
                 long downloaded = 0;
                 int lastPct = -1;
+                object pctLock = new object();
                 long chunkSize = totalLength / parts;
                 Task[] workers = new Task[parts];
 
@@ -2403,9 +2404,17 @@ namespace Qinstall
                                         chunkRead += read;
                                         long nowTotal = Interlocked.Add(ref downloaded, read);
                                         int pct = (int)Math.Min(99, (nowTotal * 100L) / totalLength);
-                                        if (pct != lastPct)
+                                        bool shouldReport = false;
+                                        lock (pctLock)
                                         {
-                                            lastPct = pct;
+                                            if (pct > lastPct)
+                                            {
+                                                lastPct = pct;
+                                                shouldReport = true;
+                                            }
+                                        }
+                                        if (shouldReport)
+                                        {
                                             ReportDownloadPct(pct, onProgress);
                                         }
                                     }
