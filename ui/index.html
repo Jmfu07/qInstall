@@ -233,11 +233,6 @@
           </div>
         </div>
 
-        <button class="btn-chip" id="filterAll" onclick="toggleAll()" title="Alternar selección de todas las visibles">
-          <i data-lucide="check-square" style="width: 14px; height: 14px;"></i>
-          <span>Todo</span>
-        </button>
-
         <button class="btn-chip" onclick="clearSelection()" title="Limpiar selección">
           <i data-lucide="x-circle" style="width: 14px; height: 14px;"></i>
           <span>Limpiar</span>
@@ -529,6 +524,10 @@
             <button class="btn-tool" style="height:26px; font-size:11px; padding:0 8px;" onclick="postToHost({ action: 'listDrives' })">
               <i data-lucide="refresh-cw" style="width:12px;height:12px;"></i> Re-escanear
             </button>
+          </div>
+          <div class="req-banner">
+            <i data-lucide="info" style="width:15px;height:15px;color:var(--primary);flex-shrink:0;margin-top:1px;"></i>
+            <div><b>Requisitos de unidad:</b> Mínimo <b>2 GB</b> obligatorios (unidades menores no están permitidas) · <b>4 GB+</b> recomendados. Apps pesadas como <b>Office</b> o <b>IDEs grandes</b> solo se instalan online para no llenar el pendrive.</div>
           </div>
           <div class="drive-list" id="exportDrivesList">
             <div style="font-size:12px; color:var(--text-muted); padding:8px;">Buscando unidades conectadas...</div>

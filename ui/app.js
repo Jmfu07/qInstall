@@ -491,6 +491,7 @@ function getAppTooltip(app) {
   }
   const parts = [];
   if (app.description) parts.push(app.description);
+  if (app.offlineBlocked && app.offlineBlockReason) parts.push(`Restricción de espacio: ${app.offlineBlockReason}`);
   if (app.hasOffline && app.cachedVersion) parts.push(`Caché local: v${app.cachedVersion} (funciona sin Internet)`);
   if (app.target) parts.push(`Destino: ${app.target}`);
   if (!app.isOnlineSearch) parts.push('Clic derecho para quitar del catálogo');
@@ -860,7 +861,6 @@ function toggleEssentials() {
     }
   }
   btn.classList.add('active');
-  document.getElementById('filterAll').classList.remove('active');
   syncSelectionVisuals();
   updateCounter();
 }
@@ -937,25 +937,14 @@ function updatePresetBadge() {
   });
 }
 
-function toggleAll() {
-  if (state.isBusy) return;
-  const visible = getVisibleCatalogApps();
-  const btn = document.getElementById('filterAll');
-  if (btn.classList.contains('active')) {
-    clearSelection();
-    return;
-  }
-  for (const app of visible) state.selectedKeys.add(app.key);
-  btn.classList.add('active');
-  document.getElementById('filterEssentials').classList.remove('active');
-  syncSelectionVisuals();
-  updateCounter();
-}
-
 function toggleAllFromHeader(chk) {
+  if (state.isBusy) return;
   if (chk.checked) {
-    document.getElementById('filterAll').classList.remove('active');
-    toggleAll();
+    const visible = getVisibleCatalogApps();
+    for (const app of visible) state.selectedKeys.add(app.key);
+    document.getElementById('filterEssentials').classList.remove('active');
+    syncSelectionVisuals();
+    updateCounter();
   } else {
     clearSelection();
   }
@@ -965,7 +954,6 @@ function clearSelection() {
   if (state.isBusy) return;
   state.selectedKeys.clear();
   state.selectedOnlineMap.clear();
-  document.getElementById('filterAll').classList.remove('active');
   document.getElementById('filterEssentials').classList.remove('active');
   syncSelectionVisuals();
   updateCounter();
@@ -1049,18 +1037,30 @@ function startOfflineDownload() {
     return;
   }
 
+  let eligibleCount = 0;
   const rows = apps.map(a => {
     const isTool = a.source === 'powershell';
-    const cls = isTool ? 'dialog-row-warn' : 'dialog-row-ok';
-    const note = isTool ? ' (se omitirá: solo interactiva)' : '';
+    const isBlocked = !!a.offlineBlocked;
+    if (!isTool && !isBlocked) eligibleCount++;
+    const cls = (isTool || isBlocked) ? 'dialog-row-warn' : 'dialog-row-ok';
+    const note = isBlocked
+      ? ` (omitida: ${escapeHtml(a.offlineBlockReason || 'solo instalación online por espacio')})`
+      : (isTool ? ' (se omitirá: herramienta interactiva)' : '');
     return `<div class="${cls}">• ${escapeHtml(a.name)}${note}</div>`;
   }).join('');
 
+  const confirmBtn = eligibleCount > 0
+    ? `<button class="btn-offline-dl" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedOfflineDownload()">Sí, descargar offline (${eligibleCount})</button>`
+    : '';
+
+  const intro = eligibleCount > 0
+    ? `¿Estás seguro de que deseas <b>descargar los instaladores</b> de ${eligibleCount} ${eligibleCount === 1 ? 'aplicación' : 'aplicaciones'} en <b>local\\cache\\</b> para llevarlos offline en tu almacenamiento?<br><span style="font-size:11.5px; color:var(--text-muted);">No se instalarán en esta PC; solo se guardarán los archivos instaladores permitidos.</span>`
+    : `Ninguna de las aplicaciones seleccionadas puede guardarse en modo offline en un pendrive por <b>restricción de espacio</b> o por ser interactiva. Puedes instalarlas normalmente con <b>Instalar seleccionadas</b> cuando tengas Internet.`;
+
   openDialogModal(
     'Confirmar descarga offline',
-    `<p style="font-size:13px; color:var(--text-secondary);">¿Estás seguro de que deseas <b>descargar los instaladores</b> de estas ${apps.length} ${apps.length === 1 ? 'opción' : 'opciones'} en tu carpeta <b>local\\cache\\</b> para llevarlos offline en el pendrive?<br><span style="font-size:11.5px; color:var(--text-muted);">No se instalarán en esta PC; solo se guardarán los archivos instaladores.</span></p><div class="dialog-list">${rows}</div>`,
-    `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
-     <button class="btn-offline-dl" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedOfflineDownload()">Sí, descargar offline (${apps.length})</button>`
+    `<p style="font-size:13px; color:var(--text-secondary);">${intro}</p><div class="dialog-list">${rows}</div>`,
+    `<button class="btn-header" onclick="closeDialogModal()">${eligibleCount > 0 ? 'Cancelar' : 'Entendido'}</button>${confirmBtn}`
   );
 }
 
@@ -1481,7 +1481,8 @@ function renderExportDrivesList(drives) {
   }
 
   let autoSelected = '';
-  const firstUsb = drives.find(d => d.isUsb && !d.isCurrent) || drives.find(d => !d.isCurrent);
+  const firstUsb = drives.find(d => d.isUsb && !d.isCurrent && d.meetsMin !== false)
+    || drives.find(d => !d.isCurrent && d.meetsMin !== false);
   if (firstUsb && (!inp.value || !inp.value.trim())) {
     autoSelected = firstUsb.suggestedPath;
     inp.value = autoSelected;
@@ -1491,16 +1492,23 @@ function renderExportDrivesList(drives) {
 
   listEl.innerHTML = drives.map(d => {
     const encPath = encodeJsArg(d.suggestedPath);
-    const isSel = autoSelected && autoSelected.toLowerCase() === String(d.suggestedPath || '').toLowerCase();
+    const meetsMin = d.meetsMin !== false;
+    const meetsRec = d.meetsRecommended !== false;
+    const isSel = meetsMin && autoSelected && autoSelected.toLowerCase() === String(d.suggestedPath || '').toLowerCase();
     const iconName = d.isUsb ? 'usb' : 'hard-drive';
-    const badgeCls = d.isUsb ? 'usb' : 'hdd';
-    const badgeText = d.isUsb ? 'PENDRIVE USB' : 'DISCO DURO';
+    const iconCls = d.isUsb ? 'usb' : 'hdd';
+    const badgeCls = !meetsMin ? 'blocked' : (!meetsRec ? 'tight' : (d.isUsb ? 'usb' : 'hdd'));
+    const badgeText = !meetsMin
+      ? '< 2 GB · NO APTO'
+      : (!meetsRec ? 'AJUSTADO (< 4 GB)' : (d.isUsb ? 'PENDRIVE USB' : 'DISCO DURO'));
     const currentNote = d.isCurrent ? ' · Unidad actual' : '';
+    const clickAttr = meetsMin
+      ? `onclick="selectExportDrive(this, decodeURIComponent('${encPath}'))"`
+      : `onclick="showToast('Esta unidad tiene menos de 2 GB requeridos (4 GB recomendados). No se puede instalar qInstall aquí.', 'warn')"`;
     return `
-      <div class="drive-card ${isSel ? 'selected' : ''}" data-path="${escapeHtml(d.suggestedPath)}"
-           onclick="selectExportDrive(this, decodeURIComponent('${encPath}'))">
+      <div class="drive-card ${isSel ? 'selected' : ''} ${meetsMin ? '' : 'disabled'}" data-path="${escapeHtml(d.suggestedPath)}" ${clickAttr}>
         <div class="drive-card-left">
-          <div class="drive-icon-box ${badgeCls}"><i data-lucide="${iconName}" style="width:17px;height:17px;"></i></div>
+          <div class="drive-icon-box ${iconCls}"><i data-lucide="${iconName}" style="width:17px;height:17px;"></i></div>
           <div>
             <div class="drive-name">${escapeHtml(d.label)} (${escapeHtml(d.letter)})${currentNote}</div>
             <div class="drive-sub">Libre: ${formatBytes(d.freeBytes)} de ${formatBytes(d.totalBytes)} → ${escapeHtml(d.suggestedPath)}</div>

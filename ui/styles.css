@@ -1141,6 +1141,16 @@ body {
 }
 .drive-badge.usb { background: var(--status-installed-bg); color: var(--status-installed-text); border: 1px solid var(--status-installed-border); }
 .drive-badge.hdd { background: var(--status-url-bg); color: var(--status-url-text); border: 1px solid var(--status-url-border); }
+.drive-badge.blocked { background: var(--status-nonet-bg); color: var(--status-nonet-text); border: 1px solid var(--status-nonet-border); }
+.drive-badge.tight { background: var(--status-tool-bg); color: var(--status-tool-text); border: 1px solid var(--status-tool-border); }
+.drive-card.disabled { opacity: 0.55; cursor: not-allowed; }
+.drive-card.disabled:hover { border-color: var(--border-subtle); background: var(--bg-surface-2); }
+.req-banner {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 9px 11px; border-radius: var(--radius-sm);
+  background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.28);
+  font-size: 11.5px; color: var(--text-secondary); line-height: 1.45;
+}
 .modal-footer {
   padding: 13px 20px; border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface-2); display: flex; align-items: center; justify-content: flex-end; gap: 10px;

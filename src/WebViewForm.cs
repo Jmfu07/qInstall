@@ -685,19 +685,47 @@ namespace Qinstall
             List<string> skipped = new List<string>();
             for (int i = 0; i < selected.Count; i++)
             {
-                if (InstallerEngine.CanDownloadOffline(selected[i])) downloadable.Add(selected[i]);
-                else skipped.Add(selected[i].Name);
+                string blockReason = InstallerEngine.GetOfflineBlockReason(selected[i]);
+                if (!string.IsNullOrEmpty(blockReason))
+                {
+                    skipped.Add(selected[i].Name + " (" + blockReason + ")");
+                }
+                else if (InstallerEngine.CanDownloadOffline(selected[i]))
+                {
+                    downloadable.Add(selected[i]);
+                }
+                else
+                {
+                    skipped.Add(selected[i].Name);
+                }
             }
 
             if (downloadable.Count == 0)
             {
-                PostToast("Las opciones marcadas requieren red interactiva o ya son instaladores locales.", "info");
+                PostToast("Ninguna de las apps seleccionadas puede guardarse offline en pendrive (por tamaño o modo interactivo).", "warn");
+                if (skipped.Count > 0) PostLog("Omitidas de descarga offline: " + string.Join("; ", skipped.ToArray()), "warn");
                 return;
             }
 
+            // Verificar margen minimo libre en la unidad actual antes de descargar instaladores
+            try
+            {
+                string curRoot = Path.GetPathRoot(AppCatalog.GetAppBaseDirectory());
+                if (!string.IsNullOrEmpty(curRoot))
+                {
+                    DriveInfo curDrive = new DriveInfo(curRoot);
+                    if (curDrive.IsReady && curDrive.AvailableFreeSpace < InstallerEngine.MinFreeSpaceForOfflineDownloadBytes)
+                    {
+                        PostToast("Espacio insuficiente en la unidad (< 512 MB libres). Libera espacio antes de descargar instaladores offline.", "warn");
+                        return;
+                    }
+                }
+            }
+            catch { }
+
             if (skipped.Count > 0)
             {
-                PostLog("Omitidas de descarga offline (herramientas interactivas/locales): " + string.Join(", ", skipped.ToArray()), "warn");
+                PostLog("Omitidas de descarga offline (restriccion de espacio / solo online): " + string.Join("; ", skipped.ToArray()), "warn");
             }
 
             await RunOfflineDownloadBatchAsync(downloadable);
@@ -1029,6 +1057,8 @@ namespace Qinstall
 
                     bool isCurrent = string.Equals(d.RootDirectory.FullName, currentRoot, StringComparison.OrdinalIgnoreCase);
                     bool isUsb = d.DriveType == DriveType.Removable;
+                    bool meetsMin = d.TotalSize >= InstallerEngine.MinPortableDriveBytes && d.AvailableFreeSpace >= InstallerEngine.MinPortableDriveBytes;
+                    bool meetsRecommended = d.TotalSize >= InstallerEngine.RecommendedPortableDriveBytes && d.AvailableFreeSpace >= InstallerEngine.RecommendedPortableDriveBytes;
                     string label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? (isUsb ? "Pendrive USB" : "Disco local / externo") : d.VolumeLabel;
                     string defaultDest = Path.Combine(d.RootDirectory.FullName, "Qinstall");
 
@@ -1039,6 +1069,8 @@ namespace Qinstall
                         { "label", label },
                         { "isUsb", isUsb },
                         { "isCurrent", isCurrent },
+                        { "meetsMin", meetsMin },
+                        { "meetsRecommended", meetsRecommended },
                         { "freeBytes", d.AvailableFreeSpace },
                         { "totalBytes", d.TotalSize },
                         { "suggestedPath", defaultDest }
@@ -1134,6 +1166,46 @@ namespace Qinstall
                 PostToast("El destino no puede ser la misma carpeta (ni subcarpeta) donde esta qInstall actualmente.", "warn");
                 return;
             }
+
+            // Requisito minimo obligatorio: 2 GB de capacidad y 2 GB libres en la unidad destino (4 GB recomendados)
+            try
+            {
+                string destRoot = Path.GetPathRoot(destDir);
+                if (!string.IsNullOrEmpty(destRoot))
+                {
+                    DriveInfo destDrive = new DriveInfo(destRoot);
+                    if (!destDrive.IsReady)
+                    {
+                        PostToast("La unidad destino no esta lista.", "warn");
+                        return;
+                    }
+                    if (destDrive.TotalSize < InstallerEngine.MinPortableDriveBytes)
+                    {
+                        double totalGb = destDrive.TotalSize / (1024.0 * 1024.0 * 1024.0);
+                        PostMessage(new Dictionary<string, object>
+                        {
+                            { "type", "exportDone" },
+                            { "success", false },
+                            { "path", destDir },
+                            { "message", string.Format("Unidad no permitida: esta unidad tiene {0:0.1} GB y qInstall requiere un minimo obligatorio de 2 GB (4 GB recomendados).", totalGb) }
+                        });
+                        return;
+                    }
+                    if (destDrive.AvailableFreeSpace < InstallerEngine.MinPortableDriveBytes)
+                    {
+                        double freeGb = destDrive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                        PostMessage(new Dictionary<string, object>
+                        {
+                            { "type", "exportDone" },
+                            { "success", false },
+                            { "path", destDir },
+                            { "message", string.Format("Espacio libre insuficiente ({0:0.2} GB libres). Se requieren al menos 2 GB libres (4 GB recomendados) para instalar qInstall en esta unidad.", freeGb) }
+                        });
+                        return;
+                    }
+                }
+            }
+            catch { }
 
             _isBusy = true;
             int filesCopied = 0;
@@ -1464,6 +1536,7 @@ namespace Qinstall
                 bool reqNet = InstallerEngine.AppRequiresInternet(app);
                 string cachedVer = hasOffline ? InstallerEngine.GetCachedOfflineVersion(app) : string.Empty;
                 long cachedSize = hasOffline ? InstallerEngine.GetOfflineCacheSizeBytes(app) : 0;
+                string offlineBlockReason = InstallerEngine.GetOfflineBlockReason(app);
 
                 OfflineCacheUpdateInfo upd;
                 bool isOutdated = _outdatedCaches.TryGetValue(key, out upd);
@@ -1484,6 +1557,8 @@ namespace Qinstall
                     { "requiresInternet", reqNet },
                     { "cachedVersion", cachedVer ?? string.Empty },
                     { "cachedSizeBytes", cachedSize },
+                    { "offlineBlocked", !string.IsNullOrEmpty(offlineBlockReason) },
+                    { "offlineBlockReason", offlineBlockReason ?? string.Empty },
                     { "outdated", isOutdated },
                     { "latestVersion", isOutdated ? upd.LatestVersion : string.Empty }
                 });

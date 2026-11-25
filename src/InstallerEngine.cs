@@ -168,16 +168,49 @@ namespace Qinstall
             return true;
         }
 
-        public static bool CanDownloadOffline(AppItem app)
+        public const long MinPortableDriveBytes = 2L * 1024L * 1024L * 1024L;
+        public const long RecommendedPortableDriveBytes = 4L * 1024L * 1024L * 1024L;
+        public const long MinFreeSpaceForOfflineDownloadBytes = 512L * 1024L * 1024L;
+
+        public static string GetOfflineBlockReason(AppItem app)
         {
-            if (app == null) return false;
+            if (app == null) return string.Empty;
             string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
-            if (src == "winget" || src == "url") return true;
+            string id = (app.Id ?? string.Empty).Trim().ToLowerInvariant();
+
             if (src == "local")
             {
                 string args = app.SilentArgs ?? string.Empty;
-                return args.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (args.IndexOf("/configure", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return "Solo instalación online: Office offline pesa ~3-4 GB (excede espacio portable de pendrive)";
+                }
+                return string.Empty;
             }
+
+            if (id == "vs2022_community")
+                return "Solo instalación online: Visual Studio requiere varios GB de componentes";
+            if (id == "android_studio")
+                return "Solo instalación online: supera 1.2 GB con SDKs (no apto para cache local en pendrive)";
+            if (id == "docker_desktop")
+                return "Solo instalación online: instalador pesado (> 700 MB) restringido en pendrive";
+            if (id == "comfyui" || id == "lmstudio")
+                return "Solo instalación online: suite de IA pesada (> 1 GB) restringida en pendrive";
+            if (id == "intellij" || id == "intellij_community" ||
+                id == "pycharm" || id == "pycharm_community" ||
+                id == "webstorm" || id == "clion" || id == "rider" ||
+                id == "phpstorm" || id == "datagrip" || id == "goland" || id == "rustrover")
+                return "Solo instalación online: IDE pesado (~1 GB); lleva JetBrains Toolbox en el pendrive";
+
+            return string.Empty;
+        }
+
+        public static bool CanDownloadOffline(AppItem app)
+        {
+            if (app == null) return false;
+            if (!string.IsNullOrEmpty(GetOfflineBlockReason(app))) return false;
+            string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src == "winget" || src == "url") return true;
             return false;
         }
 
@@ -597,6 +630,12 @@ namespace Qinstall
             }
 
             string source = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            string blockReason = GetOfflineBlockReason(app);
+            if (!string.IsNullOrEmpty(blockReason))
+            {
+                EmitLog("[!] Omitido de descarga offline: " + app.Name + " — " + blockReason);
+                return MakeResult(app, InstallStatus.Failed, blockReason);
+            }
             EmitLog("--------------------------------------------------");
             EmitLog(string.Format("[*] Descargando para modo offline: {0}", app.Name));
 
