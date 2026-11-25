@@ -362,7 +362,7 @@ namespace Qinstall
                 Make("copilot_app", "GitHub Copilot", "IA y Agentes", "Aplicacion oficial de GitHub Copilot", "winget", "GitHub.CopilotApp", false),
                 Make("copilot_cli", "GitHub Copilot CLI", "IA y Agentes", "GitHub Copilot en linea de comandos", "winget", "GitHub.Copilot", false),
                 Make("cursor", "Cursor", "IA y Agentes", "Editor de codigo nativo con IA y agentes", "winget", "Anysphere.Cursor", false),
-                Make("windsurf", "Windsurf", "IA y Agentes", "IDE con agente Cascade de Codeium", "winget", "Codeium.Windsurf", false),
+                Make("windsurf", "Windsurf (Devin)", "IA y Agentes", "IDE con agentes de Codeium / Cognition AI (sucesor oficial de Windsurf)", "winget", "CognitionAI.DevinDesktop", false),
                 Make("trae", "Trae AI IDE", "IA y Agentes", "IDE adaptativo con agentes de IA", "winget", "ByteDance.Trae", false),
                 Make("perplexity_comet", "Perplexity Comet", "IA y Agentes", "Navegador y asistente de investigacion con IA de Perplexity", "winget", "Perplexity.Comet", false),
                 Make("ollama", "Ollama", "IA y Agentes", "Ejecuta modelos LLM locales (Llama, DeepSeek, Qwen, Gemma)", "winget", "Ollama.Ollama", false),

@@ -973,11 +973,11 @@
     },
     {
       "Id": "windsurf",
-      "Name": "Windsurf",
+      "Name": "Windsurf (Devin)",
       "Category": "IA y Agentes",
-      "Description": "IDE con agente Cascade de Codeium",
+      "Description": "IDE con agentes de Codeium / Cognition AI (sucesor oficial de Windsurf)",
       "Source": "winget",
-      "Target": "Codeium.Windsurf",
+      "Target": "CognitionAI.DevinDesktop",
       "SilentArgs": "",
       "Essential": false
     },
