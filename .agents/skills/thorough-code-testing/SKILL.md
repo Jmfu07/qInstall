@@ -25,9 +25,8 @@ Usa esta skill para **probar código con cuidado y detenimiento** antes de dar c
 - Verificar paridad entre archivos de datos externos (ej. `apps.json`) y valores por defecto en código (ej. `Models.cs`).
 - Comprobar que los recursos referenciados (íconos en `ui/icons/`, scripts, XMLs de Office, DLLs de WebView2) existan y no estén vacíos (`Length > 0`).
 
-### Fase 2 — Compilación Real (Incluso si el `.exe` está abierto)
-- Si el binario destino no está en ejecución, compilar con el script oficial (`build.bat` / toolchain del proyecto).
-- Si el ejecutable está abierto y bloqueado por el usuario, **compilar en seco hacia `%TEMP%`** con las mismas banderas del build real (ej. `csc.exe /platform:x64 /optimize+ ...`) para garantizar cero errores ni advertencias de C# 5.
+### Fase 2 — Compilación y Actualización Automática del `.exe`
+- **No depender de `build.bat` manuales.** Siempre compilar y actualizar `Qinstall.exe` directamente al terminar cambios en C# ejecutando el script con `-UpdateExe` (si el usuario tiene una ventana abierta, realiza hot-swap atómico del binario antiguo hacia `%TEMP%` y deja el nuevo `Qinstall.exe` actualizado al instante).
 
 ### Fase 3 — Pruebas de Contrato y Round-Trip en Tiempo de Ejecución
 - **Puente C# ↔ JS (WebView2 / API):**
@@ -44,11 +43,11 @@ Usa esta skill para **probar código con cuidado y detenimiento** antes de dar c
 - Verificar que `ui/index.html` no dependa de CDNs externos para garantizar funcionamiento 100% offline.
 
 ### Fase 5 — Script Automatizado de Verificación (Qinstall)
-Para proyectos Qinstall, ejecutar el script incluido en esta skill:
+Para proyectos Qinstall, ejecutar el script incluido en esta skill (con `-UpdateExe` siempre que haya cambios de C#):
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\.agents\skills\thorough-code-testing\scripts\verify_qinstall.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\.agents\skills\thorough-code-testing\scripts\verify_qinstall.ps1" -UpdateExe
 ```
-(O desde la ruta global `~/.gemini/config/skills/thorough-code-testing/scripts/verify_qinstall.ps1 -ProjectRoot "<ruta>"`).
+(O desde la ruta global `~/.gemini/config/skills/thorough-code-testing/scripts/verify_qinstall.ps1 -ProjectRoot "<ruta>" -UpdateExe`).
 
 ## Criterio de Salida
 Solo marcar la tarea como terminada cuando:

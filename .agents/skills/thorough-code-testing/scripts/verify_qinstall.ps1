@@ -1,5 +1,6 @@
 param(
-  [string]$ProjectRoot = 'C:\Users\jmfus\Desktop\Qinstall'
+  [string]$ProjectRoot = 'C:\Users\jmfus\Desktop\Qinstall',
+  [switch]$UpdateExe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -106,6 +107,34 @@ try {
       Pass "AppCatalog.CreateDefault() returned $($defCat.Apps.Count) items cleanly"
     } else {
       Fail "AppCatalog.CreateDefault() returned 0 items"
+    }
+
+    # 3d. Always update Qinstall.exe directly when -UpdateExe is requested (hot-swap via %TEMP% if currently open)
+    if ($UpdateExe) {
+      $finalExe = Join-Path $ProjectRoot 'Qinstall.exe'
+      try {
+        if (Test-Path $finalExe) {
+          try {
+            Copy-Item $tmpExe $finalExe -Force -ErrorAction Stop
+          } catch {
+            $oldStage = Join-Path $env:TEMP ('Qinstall_old_' + (Get-Date -Format 'yyyyMMdd_HHmmss') + '.exe')
+            Move-Item $finalExe $oldStage -Force -ErrorAction Stop
+            Copy-Item $tmpExe $finalExe -Force -ErrorAction Stop
+          }
+        } else {
+          Copy-Item $tmpExe $finalExe -Force -ErrorAction Stop
+        }
+        foreach ($dll in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll')) {
+          $srcDll = Join-Path (Join-Path (Join-Path $ProjectRoot 'lib') 'webview2') $dll
+          $dstDll = Join-Path $ProjectRoot $dll
+          if ((Test-Path $srcDll) -and (-not (Test-Path $dstDll))) {
+            Copy-Item $srcDll $dstDll -Force
+          }
+        }
+        Pass "Qinstall.exe actualizado automaticamente en $finalExe"
+      } catch {
+        Fail "No se pudo actualizar Qinstall.exe: $($_.Exception.Message)"
+      }
     }
   } else {
     Fail ("C# compilation failed:`n" + ($compileOut -join "`n"))
