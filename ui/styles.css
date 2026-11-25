@@ -921,6 +921,17 @@ body {
   background: rgba(239, 68, 68, 0.12); color: #f87171; border-color: rgba(239, 68, 68, 0.32);
 }
 .table-action-btn.action-danger:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+.table-uptodate-tag {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  padding: 3px 8px; border-radius: var(--radius-sm);
+  background: var(--bg-surface-2); border: 1px solid var(--border-subtle);
+}
+.tool-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: var(--radius-full); font-size: 10px; font-weight: 800;
+  background: #2563eb; color: #fff; margin-left: 2px;
+}
 
 /* ==========================================================================
    FOOTER + NYAN CAT PROGRESS BAR

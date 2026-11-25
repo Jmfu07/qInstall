@@ -247,16 +247,14 @@
       </div>
 
       <div class="toolbar-tools">
-        <button class="btn-tool" onclick="confirmUpgradeAll()" title="Actualizar todas las aplicaciones instaladas vía Winget">
+        <button class="btn-tool" id="btnUpgradeAll" onclick="confirmUpgradeAll()" title="Actualizar aplicaciones con nueva versión disponible vía Winget (conserva tus datos y configuraciones)">
           <i data-lucide="arrow-up-circle" style="width: 14px; height: 14px;"></i>
           <span>Actualizar</span>
+          <span class="tool-badge" id="upgradeCountBadge" style="display: none;">0</span>
         </button>
         <button class="btn-tool local-tool" onclick="requestAddLocalInstaller()" title="Agregar un instalador .exe o .msi local para usar sin Internet">
           <i data-lucide="folder-plus" style="width: 14px; height: 14px;"></i>
           <span>+ Local</span>
-        </button>
-        <button class="btn-tool icon-only" onclick="requestRefresh()" title="Re-escanear red, almacenamiento y apps instaladas">
-          <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
         </button>
       </div>
     </div>

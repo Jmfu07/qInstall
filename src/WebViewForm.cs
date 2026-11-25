@@ -30,10 +30,16 @@ namespace Qinstall
         private readonly List<AppItem> _autoDiscoveredLocals = new List<AppItem>();
         private readonly HashSet<string> _installedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, OfflineCacheUpdateInfo> _outdatedCaches = new Dictionary<string, OfflineCacheUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, InstalledUpdateInfo> _availableUpdates = new Dictionary<string, InstalledUpdateInfo>(StringComparer.OrdinalIgnoreCase);
         private bool _hasInternet = true;
         private string _networkLabel = string.Empty;
         private System.Windows.Forms.Timer _netDebounceTimer;
+        private System.Windows.Forms.Timer _bgSyncTimer;
+        private System.Windows.Forms.Timer _fsDebounceTimer;
+        private FileSystemWatcher _localWatcher;
         private bool _netEventsWired;
+        private bool _isCheckingNet;
+        private int _bgSyncTicks;
         private bool _wingetAvailable;
         private string _wingetVersion = string.Empty;
         private bool _isBusy;
@@ -64,8 +70,16 @@ namespace Qinstall
             this.FormClosing += WebViewForm_FormClosing;
 
             _netDebounceTimer = new System.Windows.Forms.Timer();
-            _netDebounceTimer.Interval = 1800;
+            _netDebounceTimer.Interval = 1500;
             _netDebounceTimer.Tick += NetDebounceTimer_Tick;
+
+            _bgSyncTimer = new System.Windows.Forms.Timer();
+            _bgSyncTimer.Interval = 6000;
+            _bgSyncTimer.Tick += BgSyncTimer_Tick;
+
+            _fsDebounceTimer = new System.Windows.Forms.Timer();
+            _fsDebounceTimer.Interval = 2200;
+            _fsDebounceTimer.Tick += FsDebounceTimer_Tick;
         }
 
         protected override void Dispose(bool disposing)
@@ -84,6 +98,28 @@ namespace Qinstall
                     _netDebounceTimer.Dispose();
                     _netDebounceTimer = null;
                 }
+                if (_bgSyncTimer != null)
+                {
+                    _bgSyncTimer.Stop();
+                    _bgSyncTimer.Dispose();
+                    _bgSyncTimer = null;
+                }
+                if (_fsDebounceTimer != null)
+                {
+                    _fsDebounceTimer.Stop();
+                    _fsDebounceTimer.Dispose();
+                    _fsDebounceTimer = null;
+                }
+                if (_localWatcher != null)
+                {
+                    try
+                    {
+                        _localWatcher.EnableRaisingEvents = false;
+                        _localWatcher.Dispose();
+                    }
+                    catch { }
+                    _localWatcher = null;
+                }
                 if (_engine != null)
                 {
                     _engine.LogMessage -= OnEngineLog;
@@ -95,6 +131,48 @@ namespace Qinstall
                 }
             }
             base.Dispose(disposing);
+        }
+
+        private void InitLocalFolderWatcher()
+        {
+            try
+            {
+                if (_localWatcher != null) return;
+                string localDir = AppCatalog.GetLocalInstallersDirectory();
+                Directory.CreateDirectory(localDir);
+                _localWatcher = new FileSystemWatcher(localDir);
+                _localWatcher.IncludeSubdirectories = true;
+                _localWatcher.NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite;
+                _localWatcher.Created += OnLocalFolderChanged;
+                _localWatcher.Deleted += OnLocalFolderChanged;
+                _localWatcher.Renamed += OnLocalFolderChanged;
+                _localWatcher.EnableRaisingEvents = true;
+            }
+            catch { }
+        }
+
+        private void OnLocalFolderChanged(object sender, FileSystemEventArgs e)
+        {
+            if (this.IsDisposed || !this.IsHandleCreated || _isBusy) return;
+            try
+            {
+                this.BeginInvoke(new Action(delegate
+                {
+                    if (_fsDebounceTimer != null && !this.IsDisposed && !_isBusy)
+                    {
+                        _fsDebounceTimer.Stop();
+                        _fsDebounceTimer.Start();
+                    }
+                }));
+            }
+            catch { }
+        }
+
+        private async void FsDebounceTimer_Tick(object sender, EventArgs e)
+        {
+            if (_fsDebounceTimer != null) _fsDebounceTimer.Stop();
+            if (this.IsDisposed || _isBusy || _isRefreshing) return;
+            await RunSilentBackgroundSyncAsync(false, true);
         }
 
         private void OnSystemNetworkChanged(object sender, EventArgs e)
@@ -118,26 +196,153 @@ namespace Qinstall
         {
             if (_netDebounceTimer != null) _netDebounceTimer.Stop();
             if (this.IsDisposed) return;
+            await CheckNetworkAndAutoSyncAsync();
+        }
 
-            bool onlineNow = await InstallerEngine.CheckInternetAsync();
-            string labelNow = onlineNow ? await Task.Run(delegate { return InstallerEngine.GetActiveNetworkSummary(); }) : string.Empty;
-            if (this.IsDisposed) return;
+        private async void BgSyncTimer_Tick(object sender, EventArgs e)
+        {
+            if (this.IsDisposed || _isBusy) return;
+            await CheckNetworkAndAutoSyncAsync();
 
-            if (onlineNow != _hasInternet || !string.Equals(labelNow, _networkLabel, StringComparison.OrdinalIgnoreCase))
+            _bgSyncTicks++;
+            if (_bgSyncTicks >= 10)
             {
-                _hasInternet = onlineNow;
-                _networkLabel = labelNow ?? string.Empty;
-                PostMessage(new Dictionary<string, object>
+                _bgSyncTicks = 0;
+                if (!_isBusy && !_isRefreshing)
                 {
-                    { "type", "networkUpdate" },
-                    { "hasInternet", _hasInternet },
-                    { "networkLabel", _networkLabel }
-                });
-                PostLog(
-                    _hasInternet
-                        ? ("[*] Conexion detectada automaticamente: " + (string.IsNullOrEmpty(_networkLabel) ? "Internet OK" : _networkLabel))
-                        : "[!] Se perdio la conexion a Internet — cambiando automaticamente a modo offline.",
-                    _hasInternet ? "success" : "warn");
+                    await RunSilentBackgroundSyncAsync(false, false);
+                }
+            }
+        }
+
+        private async Task CheckNetworkAndAutoSyncAsync()
+        {
+            if (_isCheckingNet || this.IsDisposed) return;
+            _isCheckingNet = true;
+            try
+            {
+                bool wasOnline = _hasInternet;
+                bool onlineNow = await InstallerEngine.CheckInternetAsync();
+                string labelNow = onlineNow ? await Task.Run(delegate { return InstallerEngine.GetActiveNetworkSummary(); }) : string.Empty;
+                if (this.IsDisposed) return;
+
+                if (onlineNow != _hasInternet || !string.Equals(labelNow, _networkLabel, StringComparison.OrdinalIgnoreCase))
+                {
+                    _hasInternet = onlineNow;
+                    _networkLabel = labelNow ?? string.Empty;
+                    PostMessage(new Dictionary<string, object>
+                    {
+                        { "type", "networkUpdate" },
+                        { "hasInternet", _hasInternet },
+                        { "networkLabel", _networkLabel }
+                    });
+                    PostLog(
+                        _hasInternet
+                            ? ("[*] Conexion detectada automaticamente: " + (string.IsNullOrEmpty(_networkLabel) ? "Internet OK" : _networkLabel))
+                            : "[!] Se perdio la conexion a Internet — cambiando automaticamente a modo offline.",
+                        _hasInternet ? "success" : "warn");
+
+                    // Al recuperar Internet, refrescar silenciosamente Winget, apps instaladas, actualizaciones y caches obsoletas
+                    if (!wasOnline && _hasInternet && !_isBusy && !_isRefreshing)
+                    {
+                        await RunSilentBackgroundSyncAsync(true, false);
+                    }
+                }
+            }
+            finally
+            {
+                _isCheckingNet = false;
+            }
+        }
+
+        private async Task RunSilentBackgroundSyncAsync(bool checkOutdatedCaches, bool forcePostState)
+        {
+            if (_isBusy || _isRefreshing || this.IsDisposed) return;
+            _isRefreshing = true;
+            try
+            {
+                int prevInstalledCount = _installedKeys.Count;
+                int prevUpdatesCount = _availableUpdates.Count;
+                int prevCatalogCount = GetAllApps().Count;
+
+                string ver = await Task.Run(delegate { return InstallerEngine.GetWingetVersion(); });
+                bool wgNow = !string.IsNullOrEmpty(ver);
+                bool wgChanged = (wgNow != _wingetAvailable);
+                _wingetAvailable = wgNow;
+                _wingetVersion = ver ?? string.Empty;
+
+                ReloadCatalogInternal();
+                List<AppItem> allApps = GetAllApps();
+
+                HashSet<string> detected = await _engine.DetectInstalledAppKeysAsync(allApps);
+                bool installedChanged = (detected.Count != prevInstalledCount);
+                if (!installedChanged)
+                {
+                    foreach (string k in detected)
+                    {
+                        if (!_installedKeys.Contains(k)) { installedChanged = true; break; }
+                    }
+                }
+                _installedKeys.Clear();
+                foreach (string k in detected) _installedKeys.Add(k);
+
+                bool updatesChanged = false;
+                if (_hasInternet && _wingetAvailable)
+                {
+                    Dictionary<string, InstalledUpdateInfo> updMap = await _engine.DetectAvailableUpdatesAsync(allApps);
+                    if (updMap.Count != prevUpdatesCount) updatesChanged = true;
+                    else
+                    {
+                        foreach (KeyValuePair<string, InstalledUpdateInfo> kv in updMap)
+                        {
+                            InstalledUpdateInfo oldU;
+                            if (!_availableUpdates.TryGetValue(kv.Key, out oldU) ||
+                                !string.Equals(oldU.AvailableVersion, kv.Value.AvailableVersion, StringComparison.OrdinalIgnoreCase))
+                            {
+                                updatesChanged = true;
+                                break;
+                            }
+                        }
+                    }
+                    _availableUpdates.Clear();
+                    foreach (KeyValuePair<string, InstalledUpdateInfo> kv in updMap)
+                    {
+                        _availableUpdates[kv.Key] = kv.Value;
+                    }
+                }
+
+                bool outdatedChanged = false;
+                if (checkOutdatedCaches && _hasInternet && _wingetAvailable)
+                {
+                    Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                    if (outdated.Count != _outdatedCaches.Count) outdatedChanged = true;
+                    _outdatedCaches.Clear();
+                    foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
+                    {
+                        _outdatedCaches[kv.Key] = kv.Value;
+                    }
+                }
+
+                bool catalogChanged = (allApps.Count != prevCatalogCount);
+                if (forcePostState || wgChanged || installedChanged || updatesChanged || outdatedChanged || catalogChanged)
+                {
+                    PostStateUpdate();
+                    if (updatesChanged && _availableUpdates.Count > prevUpdatesCount)
+                    {
+                        PostLog(string.Format("[*] Actualizaciones detectadas en segundo plano: {0} app(s) con nueva version disponible.", _availableUpdates.Count), "info");
+                    }
+                    if (checkOutdatedCaches && _outdatedCaches.Count > 0)
+                    {
+                        PostOutdatedAlert(_outdatedCaches);
+                    }
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _isRefreshing = false;
             }
         }
 
@@ -296,6 +501,9 @@ namespace Qinstall
                     case "uninstallApp":
                         await HandleUninstallAppAsync(msg);
                         break;
+                    case "upgradeApp":
+                        await HandleUpgradeSingleAppAsync(msg);
+                        break;
                     case "upgradeAll":
                         await HandleUpgradeAllAsync(msg);
                         break;
@@ -379,16 +587,26 @@ namespace Qinstall
             });
 
             _outdatedCaches.Clear();
+            _availableUpdates.Clear();
             if (_hasInternet && _wingetAvailable)
             {
-                Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                Task<Dictionary<string, OfflineCacheUpdateInfo>> outdatedTask = _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                Task<Dictionary<string, InstalledUpdateInfo>> updatesTask = _engine.DetectAvailableUpdatesAsync(allApps);
+                Dictionary<string, OfflineCacheUpdateInfo> outdated = await outdatedTask;
+                Dictionary<string, InstalledUpdateInfo> availUpd = await updatesTask;
                 foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
                 {
                     _outdatedCaches[kv.Key] = kv.Value;
                 }
+                foreach (KeyValuePair<string, InstalledUpdateInfo> kv in availUpd)
+                {
+                    _availableUpdates[kv.Key] = kv.Value;
+                }
             }
 
             PostStateUpdate();
+            InitLocalFolderWatcher();
+            if (_bgSyncTimer != null && !_bgSyncTimer.Enabled) _bgSyncTimer.Start();
 
             PostMessage(new Dictionary<string, object>
             {
@@ -434,12 +652,20 @@ namespace Qinstall
                 foreach (string k in detected) _installedKeys.Add(k);
 
                 _outdatedCaches.Clear();
+                _availableUpdates.Clear();
                 if (_hasInternet && _wingetAvailable)
                 {
-                    Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                    Task<Dictionary<string, OfflineCacheUpdateInfo>> outdatedTask = _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                    Task<Dictionary<string, InstalledUpdateInfo>> updatesTask = _engine.DetectAvailableUpdatesAsync(allApps);
+                    Dictionary<string, OfflineCacheUpdateInfo> outdated = await outdatedTask;
+                    Dictionary<string, InstalledUpdateInfo> availUpd = await updatesTask;
                     foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
                     {
                         _outdatedCaches[kv.Key] = kv.Value;
+                    }
+                    foreach (KeyValuePair<string, InstalledUpdateInfo> kv in availUpd)
+                    {
+                        _availableUpdates[kv.Key] = kv.Value;
                     }
                 }
 
@@ -1173,6 +1399,7 @@ namespace Qinstall
             if (res.Status == InstallStatus.Success)
             {
                 _installedKeys.Remove(key);
+                _availableUpdates.Remove(key);
                 PostAppUpdated(target, false, InstallerEngine.HasOfflineCache(target), _outdatedCaches.ContainsKey(key), true);
                 PostProgress(false, "idle", 100, target.Name + " desinstalada correctamente.");
                 PostToast(target.Name + " desinstalada correctamente.", "success");
@@ -1186,6 +1413,72 @@ namespace Qinstall
             {
                 PostProgress(false, "idle", 0, "No se pudo desinstalar " + target.Name + ".");
                 PostToast("No se pudo desinstalar " + target.Name + ": " + res.Message, "warn");
+            }
+        }
+
+        private async Task HandleUpgradeSingleAppAsync(Dictionary<string, object> msg)
+        {
+            if (_isBusy) return;
+            string key = GetStr(msg, "key");
+            bool silent = GetBool(msg, "silent", true);
+            if (string.IsNullOrEmpty(key)) return;
+
+            AppItem target = null;
+            List<AppItem> all = GetAllApps();
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (string.Equals(GetAppKey(all[i]), key, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = all[i];
+                    break;
+                }
+            }
+            if (target == null) return;
+
+            bool onlineNow = await InstallerEngine.CheckInternetAsync();
+            _hasInternet = onlineNow;
+            if (!onlineNow)
+            {
+                PostStateUpdate();
+                PostToast("Se requiere conexion a Internet para actualizar " + target.Name + ".", "warn");
+                return;
+            }
+            if (!_wingetAvailable)
+            {
+                PostToast("Winget no esta disponible en este equipo.", "warn");
+                return;
+            }
+
+            _isBusy = true;
+            _engine.ResetCancellation();
+            InstallResult res;
+            try
+            {
+                PostProgress(true, "install", 30, "Actualizando " + target.Name + " (conservando tus datos)...");
+                res = await _engine.UpgradeSingleAppAsync(target, silent);
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+
+            if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+            {
+                _availableUpdates.Remove(key);
+                _installedKeys.Add(key);
+                PostAppUpdated(target, true, InstallerEngine.HasOfflineCache(target), _outdatedCaches.ContainsKey(key), true);
+                PostProgress(false, "idle", 100, target.Name + " actualizada correctamente (datos conservados).");
+                PostToast(target.Name + " actualizada correctamente.", "success");
+            }
+            else if (res.Status == InstallStatus.Cancelled)
+            {
+                PostProgress(false, "idle", 0, "Actualizacion cancelada.");
+                PostToast("Actualizacion cancelada.", "warn");
+            }
+            else
+            {
+                PostProgress(false, "idle", 0, "No se pudo actualizar " + target.Name + ".");
+                PostToast("No se pudo actualizar " + target.Name + ": " + res.Message, "warn");
             }
         }
 
@@ -1834,6 +2127,8 @@ namespace Qinstall
 
                 OfflineCacheUpdateInfo upd;
                 bool isOutdated = _outdatedCaches.TryGetValue(key, out upd);
+                InstalledUpdateInfo appUpd = null;
+                bool hasAppUpdate = installed && _availableUpdates.TryGetValue(key, out appUpd);
 
                 appDtos.Add(new Dictionary<string, object>
                 {
@@ -1854,7 +2149,10 @@ namespace Qinstall
                     { "offlineBlocked", !string.IsNullOrEmpty(offlineBlockReason) },
                     { "offlineBlockReason", offlineBlockReason ?? string.Empty },
                     { "outdated", isOutdated },
-                    { "latestVersion", isOutdated ? upd.LatestVersion : string.Empty }
+                    { "latestVersion", isOutdated ? upd.LatestVersion : string.Empty },
+                    { "hasUpdate", hasAppUpdate },
+                    { "installedVersion", hasAppUpdate ? (appUpd.CurrentVersion ?? string.Empty) : string.Empty },
+                    { "availableVersion", hasAppUpdate ? (appUpd.AvailableVersion ?? string.Empty) : string.Empty }
                 });
             }
 
@@ -1872,7 +2170,8 @@ namespace Qinstall
                         { "isAdmin", InstallerEngine.IsAdministrator() },
                         { "localDir", AppCatalog.GetLocalInstallersDirectory() },
                         { "installedCount", _installedKeys.Count },
-                        { "outdatedCount", _outdatedCaches.Count }
+                        { "outdatedCount", _outdatedCaches.Count },
+                        { "updatesCount", _availableUpdates.Count }
                     }
                 }
             };
@@ -1887,6 +2186,8 @@ namespace Qinstall
         private void PostAppUpdated(AppItem app, bool installed, bool hasOffline, bool outdated, bool uncheck)
         {
             string key = GetAppKey(app);
+            InstalledUpdateInfo appUpd = null;
+            bool hasAppUpdate = installed && _availableUpdates.TryGetValue(key, out appUpd);
             PostMessage(new Dictionary<string, object>
             {
                 { "type", "appUpdated" },
@@ -1897,6 +2198,10 @@ namespace Qinstall
                 { "cachedVersion", hasOffline ? InstallerEngine.GetCachedOfflineVersion(app) : string.Empty },
                 { "cachedSizeBytes", hasOffline ? InstallerEngine.GetOfflineCacheSizeBytes(app) : 0 },
                 { "outdated", outdated },
+                { "hasUpdate", hasAppUpdate },
+                { "installedVersion", hasAppUpdate ? (appUpd.CurrentVersion ?? string.Empty) : string.Empty },
+                { "availableVersion", hasAppUpdate ? (appUpd.AvailableVersion ?? string.Empty) : string.Empty },
+                { "updatesCount", _availableUpdates.Count },
                 { "uncheck", uncheck }
             });
         }

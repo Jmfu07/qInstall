@@ -444,6 +444,23 @@ function updateEnvHeader() {
     if (diagWg) diagWg.textContent = 'No instalado';
     btnWg.style.display = state.env.hasInternet ? 'inline-flex' : 'none';
   }
+
+  const upBadge = document.getElementById('upgradeCountBadge');
+  const upBtn = document.getElementById('btnUpgradeAll');
+  const upCount = Number(state.env.updatesCount || 0);
+  if (upBadge) {
+    if (upCount > 0) {
+      upBadge.textContent = String(upCount);
+      upBadge.style.display = 'inline-flex';
+    } else {
+      upBadge.style.display = 'none';
+    }
+  }
+  if (upBtn) {
+    upBtn.title = upCount > 0
+      ? `${upCount} aplicación(es) con nueva versión disponible (conserva tus datos y configuraciones)`
+      : 'Buscar y aplicar actualizaciones disponibles vía Winget (conserva tus datos y configuraciones)';
+  }
   refreshIcons();
 }
 
@@ -505,6 +522,10 @@ function getBadgesHtml(app) {
     return `<span class="badge-group"><span class="badge badge-tool badge-compact">TOOL</span><span class="badge ${netBadge.cls} badge-compact">${netBadge.text}</span></span>`;
   }
 
+  if (app.installed && app.hasUpdate) {
+    const vTip = `Actualización disponible: v${escapeHtml(app.installedVersion || '?')} → v${escapeHtml(app.availableVersion || '?')} (conserva tus datos)`;
+    return `<span class="badge-group"><span class="badge badge-installed badge-compact">INSTALADO</span><span class="badge badge-update badge-compact" title="${vTip}">v${escapeHtml(app.availableVersion || 'NUEVA')}</span></span>`;
+  }
   if (app.installed) return '<span class="badge badge-installed">INSTALADO</span>';
   if (app.outdated) return '<span class="badge badge-update">ACTUALIZAR</span>';
   if (app.hasOffline && !app.requiresInternet) return '<span class="badge badge-offline">DESCARGADO</span>';
@@ -792,7 +813,9 @@ function renderTableView(items) {
         <button class="table-action-btn" title="Guardar en tu catálogo" onclick="event.stopPropagation(); quickSaveOnline(decodeURIComponent('${encodedKey}'))">+ Guardar</button>
         <button class="table-action-btn action-install" title="Instalar ahora" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encodedKey}'), 'install', true)">Instalar</button>`;
     } else if (app.installed) {
-      const updBtn = `<button class="table-action-btn action-update" title="Actualizar o reinstalar esta aplicación" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encodedKey}'), 'update', false)">Actualizar</button>`;
+      const updBtn = app.hasUpdate
+        ? `<button class="table-action-btn action-update" title="Actualizar de v${escapeHtml(app.installedVersion || '?')} a v${escapeHtml(app.availableVersion || '?')} (conserva tus datos)" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encodedKey}'), 'update', false)">Actualizar</button>`
+        : `<span class="table-uptodate-tag" title="Instalada y al día">Al día</span>`;
       const unBtn = canUninstall
         ? `<button class="table-action-btn action-danger" title="Desinstalar esta aplicación del equipo" onclick="event.stopPropagation(); confirmUninstallApp(decodeURIComponent('${encodedKey}'))">Desinstalar</button>`
         : '';
@@ -836,6 +859,13 @@ function applySingleAppUpdate(msg) {
     app.cachedVersion = msg.cachedVersion || '';
     if (typeof msg.cachedSizeBytes === 'number') app.cachedSizeBytes = msg.cachedSizeBytes;
     app.outdated = !!msg.outdated;
+    if (typeof msg.hasUpdate === 'boolean') app.hasUpdate = msg.hasUpdate;
+    if (typeof msg.installedVersion === 'string') app.installedVersion = msg.installedVersion;
+    if (typeof msg.availableVersion === 'string') app.availableVersion = msg.availableVersion;
+  }
+  if (typeof msg.updatesCount === 'number') {
+    state.env.updatesCount = msg.updatesCount;
+    updateEnvHeader();
   }
   if (msg.uncheck) {
     state.selectedKeys.delete(msg.key);
@@ -1550,11 +1580,16 @@ function confirmUpgradeAll() {
     showToast('Winget no está disponible en este equipo.', 'warn');
     return;
   }
+  const updatable = state.apps.filter(a => a.installed && a.hasUpdate);
+  const listHtml = updatable.length > 0
+    ? `<div class="dialog-list">${updatable.map(a => `<div class="dialog-row-ok">• ${escapeHtml(a.name)} <span style="opacity:0.7;">(v${escapeHtml(a.installedVersion || '?')} → v${escapeHtml(a.availableVersion || '?')})</span></div>`).join('')}</div>`
+    : `<p style="font-size:12px; color:var(--text-muted); margin-top:6px;">No hay actualizaciones pendientes en el catálogo de qInstall; si continúas, Winget revisará también el resto de programas del sistema.</p>`;
+
   openDialogModal(
-    'Actualizar todas las aplicaciones',
-    `<p style="font-size:13px; color:var(--text-secondary);">¿Deseas buscar y aplicar automáticamente todas las actualizaciones disponibles en este equipo mediante <b>winget upgrade --all</b>?<br><span style="font-size:11.5px; color:var(--text-muted);">Puedes ver el progreso en tiempo real en <b>Ver Registro</b> o cancelar en cualquier momento.</span></p>`,
+    updatable.length > 0 ? `Actualizar aplicaciones (${updatable.length} detectadas)` : 'Buscar actualizaciones en Windows',
+    `<p style="font-size:13px; color:var(--text-secondary);">Se aplicarán las actualizaciones disponibles mediante <b>winget upgrade --all</b>.<br><span style="color:var(--cta-green); font-size:12px; font-weight:600;">🔒 Tus datos, sesiones y configuraciones se conservan: solo se actualizan los archivos del programa.</span></p>${listHtml}`,
     `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
-     <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedUpgradeAll()">Sí, actualizar todo</button>`
+     <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedUpgradeAll()">Sí, actualizar ahora</button>`
   );
 }
 
@@ -1588,14 +1623,18 @@ function confirmSingleAppAction(key, mode, isOnlineSearch) {
   const isUpdate = mode === 'update';
   const isOff = !isOnlineSearch && app.hasOffline && !app.requiresInternet;
   const title = isUpdate ? 'Confirmar actualización' : 'Confirmar instalación';
-  const verb = isUpdate ? 'actualizar / reinstalar' : 'instalar';
-  const modeNote = isOff
-    ? '<span style="color:var(--cta-green); font-weight:600;">⚡ Se usará tu instalador offline guardado en el pendrive.</span>'
-    : '<span style="color:var(--text-muted);">Se descargará y ejecutará desde Internet.</span>';
+  const verLine = isUpdate && app.availableVersion
+    ? ` <span style="opacity:0.75;">(v${escapeHtml(app.installedVersion || '?')} → v${escapeHtml(app.availableVersion)})</span>`
+    : '';
+  const modeNote = isUpdate
+    ? '<span style="color:var(--cta-green); font-weight:600;">🔒 Tus datos, sesiones y configuraciones se conservan intactos: Winget actualiza solo los archivos del programa.</span>'
+    : (isOff
+      ? '<span style="color:var(--cta-green); font-weight:600;">⚡ Se usará tu instalador offline guardado en el pendrive.</span>'
+      : '<span style="color:var(--text-muted);">Se descargará y ejecutará desde Internet.</span>');
 
   openDialogModal(
     title,
-    `<p style="font-size:13px; color:var(--text-secondary);">¿Deseas <b>${verb} "${escapeHtml(app.name)}"</b> en este equipo?<br>${modeNote}</p>`,
+    `<p style="font-size:13px; color:var(--text-secondary);">¿Deseas <b>${isUpdate ? 'actualizar' : 'instalar'} "${escapeHtml(app.name)}"</b>${verLine} en este equipo?<br>${modeNote}</p>`,
     `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
      <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeSingleAppAction(decodeURIComponent('${enc}'), '${isUpdate ? 'update' : 'install'}', ${!!isOnlineSearch})">${isUpdate ? 'Sí, actualizar' : 'Sí, instalar'}</button>`
   );
@@ -1604,7 +1643,11 @@ function confirmSingleAppAction(key, mode, isOnlineSearch) {
 function executeSingleAppAction(key, mode, isOnlineSearch) {
   closeDialogModal();
   const silent = document.getElementById('chkSilent').checked;
-  const upgrade = mode === 'update' ? true : document.getElementById('chkUpgrade').checked;
+  if (mode === 'update' && !isOnlineSearch) {
+    postToHost({ action: 'upgradeApp', key, silent });
+    return;
+  }
+  const upgrade = document.getElementById('chkUpgrade').checked;
   if (isOnlineSearch) {
     const app = state.onlineResults.find(a => a.key === key);
     if (!app) return;

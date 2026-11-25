@@ -650,6 +650,128 @@ namespace Qinstall
             return MakeResult(app, InstallStatus.Failed, "Error de Winget al desinstalar (codigo " + exitCode + ")");
         }
 
+        public async Task<InstallResult> UpgradeSingleAppAsync(AppItem app, bool silent)
+        {
+            if (app == null || string.IsNullOrWhiteSpace(app.Target))
+            {
+                return MakeResult(app, InstallStatus.Failed, "Aplicacion invalida para actualizar");
+            }
+            string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src != "winget")
+            {
+                return await InstallAppAsync(app, silent, true);
+            }
+
+            EmitLog("--------------------------------------------------");
+            EmitLog("[*] Actualizando en su sitio (conservando tus datos): " + app.Name + " (" + app.Target + ")");
+            string pkgSource = GetWingetSourceName(app.Target);
+            string silentFlag = silent ? " --silent" : string.Empty;
+            string args = string.Format(
+                "upgrade --id \"{0}\" --exact --source {1}{2} --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                app.Target.Trim(),
+                pkgSource,
+                silentFlag);
+
+            StringBuilder output = new StringBuilder();
+            int exitCode = await RunProcessAsync("winget", args, output);
+            if (_cancelRequested)
+            {
+                return MakeResult(app, InstallStatus.Cancelled, "Actualizacion cancelada");
+            }
+            if (exitCode == 0)
+            {
+                EmitLog("[OK] " + app.Name + " actualizada correctamente (datos y configuraciones conservados).");
+                return MakeResult(app, InstallStatus.Success, "Actualizada a la ultima version");
+            }
+            if (exitCode == -1978335189)
+            {
+                EmitLog("[=] " + app.Name + " ya esta en su ultima version.");
+                return MakeResult(app, InstallStatus.AlreadyInstalled, "Ya esta al dia");
+            }
+            EmitLog(string.Format("[X] Error actualizando {0} (codigo {1}).", app.Name, exitCode));
+            return MakeResult(app, InstallStatus.Failed, "Error de Winget al actualizar (codigo " + exitCode + ")");
+        }
+
+        public async Task<Dictionary<string, InstalledUpdateInfo>> DetectAvailableUpdatesAsync(List<AppItem> apps)
+        {
+            Dictionary<string, InstalledUpdateInfo> result = new Dictionary<string, InstalledUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+            if (apps == null || apps.Count == 0) return result;
+
+            try
+            {
+                string output = await RunQuickQueryAsync(
+                    "winget",
+                    "upgrade --accept-source-agreements --disable-interactivity",
+                    14000);
+                if (string.IsNullOrWhiteSpace(output)) return result;
+
+                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                int headerIdx = -1;
+                int idCol = -1;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string line = lines[i];
+                    bool hasId = line.IndexOf("Id", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool hasAvail = line.IndexOf("Available", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    line.IndexOf("Disponible", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (hasId && hasAvail)
+                    {
+                        headerIdx = i;
+                        idCol = FindColumnStart(line, "Id");
+                        break;
+                    }
+                }
+                if (headerIdx < 0 || idCol <= 0) return result;
+
+                Dictionary<string, InstalledUpdateInfo> byPkgId = new Dictionary<string, InstalledUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+                for (int i = headerIdx + 2; i < lines.Length; i++)
+                {
+                    string line = lines[i];
+                    if (line.Length <= idCol || line.StartsWith("---")) continue;
+                    string rest = line.Substring(idCol).Trim();
+                    string[] tokens = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (tokens.Length < 3) continue;
+
+                    string pkgId = tokens[0].Trim();
+                    string curVer = tokens[1].Trim();
+                    string availVer = tokens[2].Trim();
+                    if (curVer == "<" && tokens.Length >= 4)
+                    {
+                        curVer = tokens[2].Trim();
+                        availVer = tokens[3].Trim();
+                    }
+                    if (string.IsNullOrEmpty(pkgId) || string.IsNullOrEmpty(availVer)) continue;
+                    if (pkgId.IndexOf('.') < 0 && pkgId.Length < 8) continue;
+
+                    InstalledUpdateInfo info = new InstalledUpdateInfo();
+                    info.Id = pkgId;
+                    info.CurrentVersion = curVer;
+                    info.AvailableVersion = availVer;
+                    byPkgId[pkgId] = info;
+                }
+
+                for (int i = 0; i < apps.Count; i++)
+                {
+                    AppItem app = apps[i];
+                    if (app == null || string.IsNullOrWhiteSpace(app.Target)) continue;
+                    string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+                    if (src != "winget") continue;
+
+                    InstalledUpdateInfo upd;
+                    if (byPkgId.TryGetValue(app.Target.Trim(), out upd))
+                    {
+                        string key = (app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty);
+                        result[key] = upd;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return result;
+        }
+
         public async Task<int> UpgradeAllInstalledAsync(bool silent)
         {
             EmitLog("--------------------------------------------------");
@@ -2446,5 +2568,12 @@ namespace Qinstall
             r.Message = msg;
             return r;
         }
+    }
+
+    public class InstalledUpdateInfo
+    {
+        public string Id { get; set; }
+        public string CurrentVersion { get; set; }
+        public string AvailableVersion { get; set; }
     }
 }
