@@ -1328,6 +1328,57 @@ namespace Qinstall
                         return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(downloadedFile) + ")");
                     }
 
+                    // Si la ultima version del manifiesto Winget devolvio HTTP 404 (-2145844844), probar automaticamente las 2 versiones anteriores estables
+                    string outText = output.ToString();
+                    bool isNotFound404 =
+                        code == -2145844844 ||
+                        outText.IndexOf("0x80190194", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        outText.IndexOf("404", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    if (isNotFound404 && pkgSource == "winget" && !_cancelRequested)
+                    {
+                        EmitLog("[!] La ultima version de " + app.Name + " devolvio HTTP 404 en su servidor; probando version anterior estable en Winget...");
+                        List<string> prevVersions = await GetWingetPreviousVersionsAsync(app.Target.Trim(), 2);
+                        for (int pv = 0; pv < prevVersions.Count && !_cancelRequested; pv++)
+                        {
+                            string fallbackVer = prevVersions[pv];
+                            EmitLog("[*] Intentando version anterior estable: " + app.Name + " v" + fallbackVer);
+                            ClearDirectoryFiles(cacheDir);
+
+                            string fastPrev = await TryFastDirectWingetDownloadAsync(app, cacheDir, onProgress, fallbackVer);
+                            if (_cancelRequested)
+                            {
+                                ClearDirectoryFiles(cacheDir);
+                                TryDeleteDirectoryIfNoInstaller(cacheDir);
+                                return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
+                            }
+                            if (!string.IsNullOrEmpty(fastPrev) && File.Exists(fastPrev))
+                            {
+                                EmitLog("[OK] Descarga turbo completada (v" + fallbackVer + "): " + fastPrev);
+                                return MakeResult(app, InstallStatus.Success, "Descargado rapido en local\\cache (" + Path.GetFileName(fastPrev) + " · v" + fallbackVer + ")");
+                            }
+
+                            string prevArgs = string.Format(
+                                "download --id \"{0}\" --exact --version \"{1}\" --source winget -d \"{2}\" --accept-package-agreements --accept-source-agreements --skip-dependencies --disable-interactivity",
+                                app.Target.Trim(),
+                                fallbackVer,
+                                cacheDir);
+                            StringBuilder prevOut = new StringBuilder();
+                            int prevCode = await RunProcessAsync("winget", prevArgs, prevOut);
+                            if (_cancelRequested)
+                            {
+                                TryDeleteDirectoryIfNoInstaller(cacheDir);
+                                return MakeResult(app, InstallStatus.Cancelled, "Descarga cancelada");
+                            }
+                            string prevFile = FindCachedInstallerPath(app);
+                            if (prevCode == 0 && !string.IsNullOrEmpty(prevFile))
+                            {
+                                EmitLog("[OK] Guardado offline (v" + fallbackVer + ") en: " + prevFile);
+                                return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(prevFile) + " · v" + fallbackVer + ")");
+                            }
+                        }
+                    }
+
                     TryDeleteDirectoryIfNoInstaller(cacheDir);
                     EmitLog("[X] No se pudo descargar instalador offline para " + app.Name + " (codigo " + code + ").");
                     return MakeResult(app, InstallStatus.Failed, "Winget no pudo descargar el instalador (codigo " + code + ")");
@@ -2250,6 +2301,29 @@ namespace Qinstall
                 return MakeResult(app, InstallStatus.AlreadyInstalled, "Ya instalado y actualizado");
             }
 
+            if (exitCode == -2145844844 && pkgSource == "winget" && !_cancelRequested)
+            {
+                EmitLog("[!] La ultima version de " + app.Name + " devolvio HTTP 404; intentando version anterior estable...");
+                List<string> prevVersions = await GetWingetPreviousVersionsAsync(app.Target.Trim(), 2);
+                for (int pv = 0; pv < prevVersions.Count && !_cancelRequested; pv++)
+                {
+                    string fallbackVer = prevVersions[pv];
+                    string prevArgs = string.Format(
+                        "install --id \"{0}\" --exact --version \"{1}\" --source winget{2} --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                        app.Target.Trim(),
+                        fallbackVer,
+                        silentFlag);
+                    StringBuilder prevOut = new StringBuilder();
+                    int prevCode = await RunProcessAsync("winget", prevArgs, prevOut);
+                    if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Cancelado por el usuario");
+                    if (prevCode == 0)
+                    {
+                        EmitLog("[OK] " + app.Name + " v" + fallbackVer + " instalado correctamente.");
+                        return MakeResult(app, InstallStatus.Success, "Instalado correctamente (v" + fallbackVer + ")");
+                    }
+                }
+            }
+
             if (exitCode == -1978335212)
             {
                 EmitLog("[X] No se encontro el paquete '" + app.Target + "' en Winget.");
@@ -2483,16 +2557,61 @@ namespace Qinstall
             return MakeResult(app, InstallStatus.Failed, "Codigo de salida: " + exitCode);
         }
 
-        private async Task<string> TryFastDirectWingetDownloadAsync(AppItem app, string cacheDir, Action<int> onProgress)
+        private static async Task<List<string>> GetWingetPreviousVersionsAsync(string packageId, int maxFallback)
+        {
+            List<string> result = new List<string>();
+            try
+            {
+                string safeId = (packageId ?? string.Empty).Replace("\"", string.Empty).Trim();
+                if (string.IsNullOrEmpty(safeId)) return result;
+
+                string args = string.Format(
+                    "show --id \"{0}\" --exact --source winget --versions --accept-source-agreements --disable-interactivity",
+                    safeId);
+                string output = await RunQuickQueryAsync("winget", args, 8000);
+                if (string.IsNullOrWhiteSpace(output)) return result;
+
+                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                bool afterRule = false;
+                bool skippedLatest = false;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string t = lines[i].Trim();
+                    if (!afterRule)
+                    {
+                        if (t.StartsWith("---")) afterRule = true;
+                        continue;
+                    }
+                    if (string.IsNullOrWhiteSpace(t)) continue;
+                    string verToken = t.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                    if (string.IsNullOrEmpty(verToken)) continue;
+                    if (!skippedLatest)
+                    {
+                        skippedLatest = true;
+                        continue;
+                    }
+                    result.Add(verToken);
+                    if (result.Count >= maxFallback) break;
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private async Task<string> TryFastDirectWingetDownloadAsync(AppItem app, string cacheDir, Action<int> onProgress, string specificVersion = null)
         {
             try
             {
                 string safeId = (app.Target ?? string.Empty).Replace("\"", string.Empty).Trim();
                 if (string.IsNullOrEmpty(safeId)) return null;
 
+                string verFlag = !string.IsNullOrWhiteSpace(specificVersion)
+                    ? (" --version \"" + specificVersion.Replace("\"", string.Empty).Trim() + "\"")
+                    : string.Empty;
                 string args = string.Format(
-                    "show --id \"{0}\" --exact --source winget --accept-source-agreements --disable-interactivity",
-                    safeId);
+                    "show --id \"{0}\" --exact{1} --source winget --accept-source-agreements --disable-interactivity",
+                    safeId,
+                    verFlag);
                 string info = await RunQuickQueryAsync("winget", args, 8000);
                 if (string.IsNullOrEmpty(info) || _cancelRequested) return null;
 
