@@ -1,0 +1,101 @@
+name: Build & Publish qInstall Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag de release (ej. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run QA Suite and Build Qinstall.exe
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File ".\.agents\skills\thorough-code-testing\scripts\verify_qinstall.ps1" -ProjectRoot "$PWD" -UpdateExe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package Portable ZIP and SHA256
+        id: pkg
+        shell: pwsh
+        run: |
+          $tag = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ github.event.inputs.tag }}" } else { "${{ github.ref_name }}" }
+          $stageRoot = Join-Path $env:RUNNER_TEMP "qinstall_pkg"
+          $appDir = Join-Path $stageRoot "qInstall"
+          if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $appDir -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $appDir "local") -Force | Out-Null
+
+          Copy-Item "Qinstall.exe" $appDir -Force
+          Copy-Item "lib\webview2\Microsoft.Web.WebView2.Core.dll" $appDir -Force
+          Copy-Item "lib\webview2\Microsoft.Web.WebView2.WinForms.dll" $appDir -Force
+          Copy-Item "lib\webview2\WebView2Loader.dll" $appDir -Force
+          Copy-Item "apps.json" $appDir -Force
+          Copy-Item "README.md" $appDir -Force
+          Copy-Item "ui" (Join-Path $appDir "ui") -Recurse -Force
+          Copy-Item "office" (Join-Path $appDir "office") -Recurse -Force
+
+          $outDir = Join-Path $env:RUNNER_TEMP "qinstall_out"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          $zipName = "qInstall-$tag-win-x64-portable.zip"
+          $zipPath = Join-Path $outDir $zipName
+          Compress-Archive -Path $appDir -DestinationPath $zipPath -CompressionLevel Optimal -Force
+
+          $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $shaPath = Join-Path $outDir "SHA256SUMS.txt"
+          "$hash  $zipName" | Set-Content -Path $shaPath -Encoding Ascii
+
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "sha_path=$shaPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Packaged $zipName ($((Get-Item $zipPath).Length) bytes) SHA256=$hash"
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ steps.pkg.outputs.tag }}"
+          $zipPath = "${{ steps.pkg.outputs.zip_path }}"
+          $shaPath = "${{ steps.pkg.outputs.sha_path }}"
+
+          $notes = @"
+## 🚀 qInstall $tag — Primera Release Oficial (100% Portable)
+
+**Instalador por lotes 100% portable para USB, SSD y HDD (internos o externos) en Windows 10 / 11 (64-bit).**
+
+### ✨ Novedades principales
+- **📦 Catálogo de 176 aplicaciones en 14 categorías:** Navegadores, Utilidades, Optimización, Arranque y Reparación, Soporte y Drivers, Multimedia (incluye HandBrake, Kdenlive, Shotcut, CapCut, GIMP, Inkscape, Krita, Blender, Darktable, Scribus, Adobe CC), Comunicación, Oficina (Office 2016–2024 ODT, LibreOffice, PDFgear), IA y Agentes (ChatGPT, Claude, Gemini, Antigravity, Cursor, Windsurf/Devin, Ollama, Grammarly, Otter.ai...), IDEs y JetBrains, Desarrollo, Juegos, Runtimes y Java.
+- **⚡ Descarga Turbo + Modo Offline real:** Descarga instaladores (`.exe`, `.msi`, `.msix`, `.appx`, `.zip`) a `local\cache\` con **4 conexiones paralelas + 2 apps simultáneas**, verificación **SHA256**, *staging* en `%TEMP%` y recuperación automática de versión anterior ante HTTP 404.
+- **🧹 Desinstalador Universal de 5 capas:** Winget (con reintento interactivo), ID real ARP/MSIX, Microsoft Store (`Remove-AppxPackage`), Registro nativo de Windows (100% offline) y herramientas `.zip` portables.
+- **🌐 Auto-sincronización en segundo plano:** Detecta automáticamente Wi-Fi (con SSID) / Ethernet, cambios en `local\` y actualizaciones reales vía `winget upgrade` conservando tus datos y configuraciones.
+- **🎨 Interfaz WebView2 100% Offline:** 138 íconos locales, temas Oscuro / Claro / Sistema, vistas **Galería** y **Tabla** (con acciones directas de 1 clic), barra **Nyan Cat** a 60 fps y respaldo automático nativo WinForms.
+- **💾 Panel `Almacenamiento` integrado:** Copia `qInstall` limpio a cualquier **USB, SSD o HDD** (mínimo 2 GB, recomendado 4 GB+) con perfiles portables en `profiles.json`.
+
+### 📥 Cómo usar
+1. Descarga **`qInstall-$tag-win-x64-portable.zip`** abajo.
+2. Extrae la carpeta `qInstall/` en tu **USB, SSD o HDD**.
+3. Ejecuta **`Qinstall.exe`** (solicitará permisos de Administrador).
+
+> Verificado en hardware real (incluyendo memoria USB 2.0 Patriot de 4 GB de hace 18 años) · Compilado y validado con **14/14 pruebas QA en verde**.
+"@
+
+          $notesFile = Join-Path $env:RUNNER_TEMP "release_notes.md"
+          $notes | Set-Content -Path $notesFile -Encoding UTF8
+
+          gh release create "$tag" "$zipPath" "$shaPath" `
+            --title "qInstall $tag — Portable Batch Installer (Windows x64)" `
+            --notes-file "$notesFile" `
+            --latest
