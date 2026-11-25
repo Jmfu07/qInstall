@@ -27,7 +27,12 @@ namespace Qinstall
         private readonly Dictionary<string, CheckBox> _appCheckboxes = new Dictionary<string, CheckBox>();
         private readonly Dictionary<string, Label> _appTagLabels = new Dictionary<string, Label>();
         private readonly Dictionary<string, bool> _selectedState = new Dictionary<string, bool>();
+        private readonly Dictionary<string, AppItem> _onlineSelectedApps = new Dictionary<string, AppItem>();
+        private readonly List<AppItem> _currentOnlineResults = new List<AppItem>();
         private readonly HashSet<string> _installedApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Timer _searchDebounceTimer;
+        private int _onlineSearchSeq;
+        private bool _isSearchingOnline;
         private bool _isInstalling;
         private bool _cancelPending;
         private bool _wingetAvailable;
@@ -57,9 +62,23 @@ namespace Qinstall
             _engine.DownloadProgress += OnDownloadProgress;
             _toolTip = new ToolTip();
 
+            _searchDebounceTimer = new Timer();
+            _searchDebounceTimer.Interval = 400;
+            _searchDebounceTimer.Tick += SearchDebounceTimer_Tick;
+
             BuildUi();
             LoadCatalogAndRender();
             CheckEnvironmentAsync();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _searchDebounceTimer != null)
+            {
+                _searchDebounceTimer.Stop();
+                _searchDebounceTimer.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         private void BuildUi()
@@ -149,11 +168,13 @@ namespace Qinstall
 
             _txtSearch = new TextBox();
             _txtSearch.Location = new Point(74, 13);
-            _txtSearch.Size = new Size(240, 26);
+            _txtSearch.Size = new Size(300, 26);
             _txtSearch.BackColor = _bgControl;
             _txtSearch.ForeColor = Color.White;
             _txtSearch.BorderStyle = BorderStyle.FixedSingle;
-            _txtSearch.TextChanged += delegate { RenderCategories(_txtSearch.Text); };
+            _txtSearch.TextChanged += TxtSearch_TextChanged;
+            _txtSearch.KeyDown += TxtSearch_KeyDown;
+            _toolTip.SetToolTip(_txtSearch, "Filtra tus apps o busca cualquier programa online en Winget (presiona Enter para buscar al instante)");
             pnlToolbar.Controls.Add(_txtSearch);
 
             FlowLayoutPanel pnlActions = new FlowLayoutPanel();
@@ -182,11 +203,6 @@ namespace Qinstall
             btnAddApp.Margin = new Padding(0, 0, 8, 0);
             btnAddApp.Click += BtnAddApp_Click;
             pnlActions.Controls.Add(btnAddApp);
-
-            Button btnEditJson = CreateFlatButton("apps.json", 84, 30, _bgControl);
-            btnEditJson.Margin = new Padding(0, 0, 8, 0);
-            btnEditJson.Click += BtnEditJson_Click;
-            pnlActions.Controls.Add(btnEditJson);
 
             Button btnReload = CreateFlatButton("Recargar", 80, 30, _bgControl);
             btnReload.Click += delegate { LoadCatalogAndRender(); RefreshInstalledAppsAsync(); };
@@ -372,6 +388,97 @@ namespace Qinstall
             RenderCategories(_txtSearch != null ? _txtSearch.Text : string.Empty);
         }
 
+        private void TxtSearch_TextChanged(object sender, EventArgs e)
+        {
+            _searchDebounceTimer.Stop();
+            string query = (_txtSearch.Text ?? string.Empty).Trim();
+
+            if (query.Length < 2)
+            {
+                _onlineSearchSeq++;
+                _isSearchingOnline = false;
+                _currentOnlineResults.Clear();
+                RenderCategories(query);
+                return;
+            }
+
+            _isSearchingOnline = _wingetAvailable;
+            RenderCategories(query);
+
+            if (_wingetAvailable)
+            {
+                _searchDebounceTimer.Start();
+            }
+        }
+
+        private void TxtSearch_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                _searchDebounceTimer.Stop();
+                string query = (_txtSearch.Text ?? string.Empty).Trim();
+                if (query.Length >= 2 && _wingetAvailable)
+                {
+                    SearchOnlineWingetAsync(query);
+                }
+            }
+            else if (e.KeyCode == Keys.Escape)
+            {
+                e.SuppressKeyPress = true;
+                _txtSearch.Text = string.Empty;
+            }
+        }
+
+        private void SearchDebounceTimer_Tick(object sender, EventArgs e)
+        {
+            _searchDebounceTimer.Stop();
+            string query = (_txtSearch.Text ?? string.Empty).Trim();
+            if (query.Length >= 2 && _wingetAvailable)
+            {
+                SearchOnlineWingetAsync(query);
+            }
+        }
+
+        private async void SearchOnlineWingetAsync(string query)
+        {
+            int mySeq = ++_onlineSearchSeq;
+            _isSearchingOnline = true;
+
+            List<WingetSearchEntry> entries = await _engine.SearchWingetAsync(query, 12);
+            if (this.IsDisposed || mySeq != _onlineSearchSeq) return;
+
+            HashSet<string> existingTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < _catalog.Apps.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(_catalog.Apps[i].Target))
+                {
+                    existingTargets.Add(_catalog.Apps[i].Target.Trim());
+                }
+            }
+
+            _currentOnlineResults.Clear();
+            for (int i = 0; i < entries.Count; i++)
+            {
+                WingetSearchEntry e = entries[i];
+                if (existingTargets.Contains(e.Id)) continue;
+
+                AppItem item = new AppItem();
+                item.Id = "winget_" + e.Id.ToLowerInvariant().Replace(".", "_");
+                item.Name = e.Name;
+                item.Category = "Resultados Online (Winget)";
+                item.Description = "Paquete Winget: " + e.Id + (string.IsNullOrEmpty(e.Version) ? string.Empty : " (v" + e.Version + ")");
+                item.Source = "winget";
+                item.Target = e.Id;
+                item.SilentArgs = string.Empty;
+                item.Essential = false;
+                _currentOnlineResults.Add(item);
+            }
+
+            _isSearchingOnline = false;
+            RenderCategories(_txtSearch.Text);
+        }
+
         private void RenderCategories(string filterText)
         {
             _flowCategories.SuspendLayout();
@@ -410,17 +517,69 @@ namespace Qinstall
             {
                 string catName = categoryOrder[c];
                 List<AppItem> apps = grouped[catName];
-                Panel card = CreateCategoryCard(catName, apps);
+                Panel card = CreateCategoryCard(catName, apps, false);
                 _flowCategories.Controls.Add(card);
+            }
+
+            // Tarjeta de resultados online desde Winget cuando el usuario busca
+            if (query.Length >= 2 && _wingetAvailable)
+            {
+                if (_currentOnlineResults.Count > 0)
+                {
+                    Panel onlineCard = CreateCategoryCard("Resultados Online (Winget)", _currentOnlineResults, true);
+                    _flowCategories.Controls.Add(onlineCard);
+                }
+                else if (_isSearchingOnline)
+                {
+                    Panel loadingCard = CreateOnlineStatusCard("Buscando '" + query + "' en Winget...");
+                    _flowCategories.Controls.Add(loadingCard);
+                }
+                else if (categoryOrder.Count == 0)
+                {
+                    Panel emptyCard = CreateOnlineStatusCard("Sin resultados para '" + query + "' en tu catalogo ni en Winget.");
+                    _flowCategories.Controls.Add(emptyCard);
+                }
             }
 
             _flowCategories.ResumeLayout();
             UpdateSelectedCounter();
         }
 
-        private Panel CreateCategoryCard(string categoryName, List<AppItem> apps)
+        private Panel CreateOnlineStatusCard(string message)
         {
-            int cardWidth = 315;
+            Panel card = new Panel();
+            card.Size = new Size(340, 84);
+            card.BackColor = _bgCard;
+            card.Margin = new Padding(8);
+
+            Panel accent = new Panel();
+            accent.Dock = DockStyle.Top;
+            accent.Height = 3;
+            accent.BackColor = _accentGreen;
+            card.Controls.Add(accent);
+
+            Label lblCat = new Label();
+            lblCat.Text = "BUSQUEDA ONLINE (WINGET)";
+            lblCat.Font = new Font("Segoe UI Semibold", 9.5f);
+            lblCat.ForeColor = Color.FromArgb(145, 235, 185);
+            lblCat.Location = new Point(12, 12);
+            lblCat.AutoSize = true;
+            card.Controls.Add(lblCat);
+
+            Label lblMsg = new Label();
+            lblMsg.Text = message;
+            lblMsg.Font = new Font("Segoe UI", 9f);
+            lblMsg.ForeColor = _textMuted;
+            lblMsg.Location = new Point(12, 42);
+            lblMsg.Size = new Size(316, 30);
+            card.Controls.Add(lblMsg);
+
+            return card;
+        }
+
+        private Panel CreateCategoryCard(string categoryName, List<AppItem> apps, bool isOnlineSearchCard)
+        {
+            int cardWidth = isOnlineSearchCard ? 360 : 315;
             int rowHeight = 32;
             int headerHeight = 36;
             int cardHeight = headerHeight + (apps.Count * rowHeight) + 14;
@@ -435,13 +594,13 @@ namespace Qinstall
             Panel accent = new Panel();
             accent.Dock = DockStyle.Top;
             accent.Height = 3;
-            accent.BackColor = _accentBlue;
+            accent.BackColor = isOnlineSearchCard ? _accentGreen : _accentBlue;
             card.Controls.Add(accent);
 
             Label lblCat = new Label();
             lblCat.Text = categoryName.ToUpperInvariant();
             lblCat.Font = new Font("Segoe UI Semibold", 9.5f);
-            lblCat.ForeColor = Color.FromArgb(140, 185, 255);
+            lblCat.ForeColor = isOnlineSearchCard ? Color.FromArgb(145, 235, 185) : Color.FromArgb(140, 185, 255);
             lblCat.Location = new Point(12, 12);
             lblCat.AutoSize = true;
             card.Controls.Add(lblCat);
@@ -456,32 +615,62 @@ namespace Qinstall
                 cb.Text = app.Name;
                 cb.Tag = app;
                 cb.Location = new Point(12, y);
-                cb.Size = new Size(220, 24);
+                cb.Size = new Size(isOnlineSearchCard ? 235 : 220, 24);
                 cb.ForeColor = _textPrimary;
                 cb.Font = new Font("Segoe UI", 9.3f);
-                cb.Cursor = Cursors.Hand;
+                cb.Cursor = _isInstalling ? Cursors.Default : Cursors.Hand;
+                cb.AutoCheck = !_isInstalling;
                 bool prevChecked;
                 if (_selectedState.TryGetValue(key, out prevChecked))
                 {
                     cb.Checked = prevChecked;
                 }
+                bool captureOnline = isOnlineSearchCard;
                 cb.CheckedChanged += delegate(object s, EventArgs ev)
                 {
                     CheckBox box = (CheckBox)s;
                     AppItem item = (AppItem)box.Tag;
-                    _selectedState[GetAppKey(item)] = box.Checked;
+                    string itemKey = GetAppKey(item);
+                    _selectedState[itemKey] = box.Checked;
+                    if (captureOnline)
+                    {
+                        if (box.Checked) _onlineSelectedApps[itemKey] = item;
+                        else _onlineSelectedApps.Remove(itemKey);
+                    }
                     UpdateSelectedCounter();
                 };
 
                 string tip = string.IsNullOrWhiteSpace(app.Description)
                     ? app.Target
                     : app.Description + "\nOrigen: " + app.Source.ToUpperInvariant() + " (" + app.Target + ")";
+                if (!isOnlineSearchCard)
+                {
+                    tip += "\n(Clic derecho para quitar del catalogo)";
+                    ContextMenuStrip menu = new ContextMenuStrip();
+                    AppItem removeTarget = app;
+                    ToolStripMenuItem miRemove = new ToolStripMenuItem("Quitar '" + app.Name + "' del catalogo");
+                    miRemove.Click += delegate { RemoveAppFromCatalog(removeTarget); };
+                    menu.Items.Add(miRemove);
+                    cb.ContextMenuStrip = menu;
+                }
                 _toolTip.SetToolTip(cb, tip);
 
                 card.Controls.Add(cb);
                 _appCheckboxes[key] = cb;
 
-                // Etiqueta de estado / origen (INSTALADO / ONLINE / URL / LOCAL)
+                if (isOnlineSearchCard)
+                {
+                    // Boton rapido "+" para guardar esta app online permanentemente en el catalogo
+                    AppItem saveTarget = app;
+                    Button btnQuickAdd = CreateFlatButton("+", 26, 20, Color.FromArgb(46, 125, 246));
+                    btnQuickAdd.Font = new Font("Segoe UI Bold", 9f);
+                    btnQuickAdd.Location = new Point(cardWidth - 104, y + 2);
+                    _toolTip.SetToolTip(btnQuickAdd, "Guardar '" + app.Name + "' permanentemente en tu catalogo");
+                    btnQuickAdd.Click += delegate { QuickSaveOnlineApp(saveTarget); };
+                    card.Controls.Add(btnQuickAdd);
+                }
+
+                // Etiqueta de estado / origen (INSTALADO / ONLINE / URL / LOCAL / TOOL)
                 Label lblTag = new Label();
                 lblTag.Font = new Font("Segoe UI Semibold", 7.0f);
                 lblTag.TextAlign = ContentAlignment.MiddleCenter;
@@ -495,6 +684,50 @@ namespace Qinstall
             }
 
             return card;
+        }
+
+        private void QuickSaveOnlineApp(AppItem onlineApp)
+        {
+            if (_isInstalling || onlineApp == null) return;
+            AppItem copy = new AppItem();
+            copy.Id = onlineApp.Id;
+            copy.Name = onlineApp.Name;
+            copy.Category = "Utilidades";
+            copy.Description = onlineApp.Description;
+            copy.Source = "winget";
+            copy.Target = onlineApp.Target;
+            copy.SilentArgs = string.Empty;
+            copy.Essential = false;
+
+            _catalog.Apps.Add(copy);
+            AppCatalog.Save(_catalog);
+
+            string key = GetAppKey(copy);
+            _onlineSelectedApps.Remove(key);
+            _selectedState[key] = true;
+            _currentOnlineResults.Remove(onlineApp);
+
+            RenderCategories(_txtSearch.Text);
+            _lblStatus.Text = "'" + copy.Name + "' guardada en tu catalogo (Utilidades).";
+            AppendLog("[+] Guardada en catalogo desde busqueda online: " + copy.Name + " (" + copy.Target + ")");
+        }
+
+        private void RemoveAppFromCatalog(AppItem app)
+        {
+            if (_isInstalling || app == null) return;
+            DialogResult confirm = MessageBox.Show(
+                this,
+                "¿Quitar '" + app.Name + "' de tu catalogo?",
+                "Quitar aplicacion",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (confirm != DialogResult.Yes) return;
+
+            _catalog.Apps.Remove(app);
+            AppCatalog.Save(_catalog);
+            _selectedState.Remove(GetAppKey(app));
+            RenderCategories(_txtSearch.Text);
+            _lblStatus.Text = "'" + app.Name + "' quitada del catalogo.";
         }
 
         private static void ApplyTagStyle(Label lblTag, AppItem app, bool installed)
@@ -537,15 +770,28 @@ namespace Qinstall
         private List<AppItem> GetSelectedApps()
         {
             List<AppItem> selected = new List<AppItem>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             for (int i = 0; i < _catalog.Apps.Count; i++)
             {
                 AppItem app = _catalog.Apps[i];
+                string key = GetAppKey(app);
                 bool isSel;
-                if (_selectedState.TryGetValue(GetAppKey(app), out isSel) && isSel)
+                if (_selectedState.TryGetValue(key, out isSel) && isSel && seen.Add(key))
                 {
                     selected.Add(app);
                 }
             }
+
+            foreach (KeyValuePair<string, AppItem> kv in _onlineSelectedApps)
+            {
+                bool isSel;
+                if (_selectedState.TryGetValue(kv.Key, out isSel) && isSel && seen.Add(kv.Key))
+                {
+                    selected.Add(kv.Value);
+                }
+            }
+
             return selected;
         }
 
@@ -586,6 +832,7 @@ namespace Qinstall
         {
             if (_isInstalling) return;
             _selectedState.Clear();
+            _onlineSelectedApps.Clear();
             SyncCheckboxesFromState();
         }
 
@@ -623,23 +870,6 @@ namespace Qinstall
                     RenderCategories(_txtSearch.Text);
                     AppendLog("[+] Aplicacion agregada y guardada en apps.json: " + dlg.CreatedApp.Name);
                 }
-            }
-        }
-
-        private void BtnEditJson_Click(object sender, EventArgs e)
-        {
-            string path = AppCatalog.GetCatalogPath();
-            if (!File.Exists(path))
-            {
-                AppCatalog.Save(_catalog);
-            }
-            try
-            {
-                Process.Start("notepad.exe", "\"" + path + "\"");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, "No se pudo abrir apps.json: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
