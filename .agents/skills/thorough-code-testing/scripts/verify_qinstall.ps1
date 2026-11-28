@@ -61,9 +61,10 @@ $csc = 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $tmpExe = Join-Path $env:TEMP ('Qinstall_qa_' + [Guid]::NewGuid().ToString('N').Substring(0,8) + '.exe')
 try {
   Push-Location $ProjectRoot
-  $compileOut = & $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$tmpExe" `
+  $compileOut = & $csc /nologo /codepage:65001 /target:winexe /platform:x64 /optimize+ "/out:$tmpExe" `
     /win32manifest:src\app.manifest /win32icon:src\qinstall.ico `
     /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Web.Extensions.dll `
+    /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
     /r:lib\webview2\Microsoft.Web.WebView2.Core.dll /r:lib\webview2\Microsoft.Web.WebView2.WinForms.dll `
     src\Program.cs src\Models.cs src\InstallerEngine.cs src\MainForm.cs src\WebViewForm.cs src\AddAppDialog.cs 2>&1
   $compileCode = $LASTEXITCODE
@@ -88,16 +89,45 @@ try {
       Fail "WebViewForm.GetStringList failed on JavaScriptSerializer payload (returned count=$($parsedKeys.Count))"
     }
 
-    # 3b. Verify InstallerEngine.IsVersionOlder edge cases
+    # 3b. Verify InstallerEngine.IsVersionOlder edge cases (v-prefix, commas, Unknown, numeric)
     $engType = $asm.GetType('Qinstall.InstallerEngine')
     $isOlder = $engType.GetMethod('IsVersionOlder', [System.Reflection.BindingFlags]'Public,Static')
     $v1 = $isOlder.Invoke($null, @('1.9.0', '1.10.0'))
     $v2 = $isOlder.Invoke($null, @('2026.3.0.1', '2025.3'))
     $v3 = $isOlder.Invoke($null, @('4.76.6', '4.76.6'))
-    if ($v1 -eq $true -and $v2 -eq $false -and $v3 -eq $false) {
-      Pass "InstallerEngine.IsVersionOlder passed numeric & equality edge cases"
+    $v4 = $isOlder.Invoke($null, @('v1.0.0', 'v1.1.0'))
+    $v5 = $isOlder.Invoke($null, @('24, 8, 0, 0', '24.09'))
+    $v6 = $isOlder.Invoke($null, @('Unknown', '24.09'))
+    if ($v1 -eq $true -and $v2 -eq $false -and $v3 -eq $false -and $v4 -eq $true -and $v5 -eq $true -and $v6 -eq $false) {
+      Pass "InstallerEngine.IsVersionOlder passed numeric, v-prefix, Win32 comma & Unknown edge cases"
     } else {
-      Fail "InstallerEngine.IsVersionOlder failed (v1=$v1, v2=$v2, v3=$v3)"
+      Fail "InstallerEngine.IsVersionOlder failed (v1=$v1, v2=$v2, v3=$v3, v4=$v4, v5=$v5, v6=$v6)"
+    }
+
+    # 3b-2. Verify ParseWingetUpgradeOutput on Spanish headers, truncated ellipsis IDs & Unknown versions
+    $catType = $asm.GetType('Qinstall.AppCatalog')
+    $defCat = $catType.GetMethod('CreateDefault').Invoke($null, $null)
+    $parseUpd = $engType.GetMethod('ParseWingetUpgradeOutput', [System.Reflection.BindingFlags]'Public,Static')
+    $regDict = $ser.Deserialize('{"7-Zip 24.08 (x64)":"24.08","VLC media player":"3.0.21"}', [System.Collections.Generic.Dictionary[string,string]])
+    $hdrVer = 'Versi' + [char]0x00F3 + 'n'
+    $truncId = 'Microsoft.VisualStudio.2022.Com' + [char]0x2026
+    $sampleOut = @(
+      ("Nombre                            Id                                " + $hdrVer + "       Disponible    Origen"),
+      "------------------------------------------------------------------------------------------------------",
+      "Google Chrome                     Google.Chrome                     < 130.0.1     131.0.2       winget",
+      ("Visual Studio Community 2022      " + $truncId + "  17.11.2       17.12.0       winget"),
+      "7-Zip 24.08 (x64)                 7zip.7zip                         Desconocida   24.09         winget",
+      "VLC media player                  VideoLAN.VLC                      Desconocida   3.0.21        winget",
+      "4 actualizaciones disponibles."
+    ) -join "`r`n"
+    $parsedUpds = $parseUpd.Invoke($null, @($sampleOut, $defCat.Apps, $regDict))
+    if ($parsedUpds.ContainsKey('chrome|Google.Chrome') -and
+        $parsedUpds.ContainsKey('vs2022_community|Microsoft.VisualStudio.2022.Community') -and
+        $parsedUpds.ContainsKey('7zip|7zip.7zip') -and
+        (-not $parsedUpds.ContainsKey('vlc|VideoLAN.VLC'))) {
+      Pass "InstallerEngine.ParseWingetUpgradeOutput handled Spanish table, ellipsis IDs & Unknown filtering"
+    } else {
+      Fail "InstallerEngine.ParseWingetUpgradeOutput failed contract check (count=$($parsedUpds.Count))"
     }
 
     # 3c. Verify AppCatalog.CreateDefault

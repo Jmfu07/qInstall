@@ -305,6 +305,13 @@ if (window.chrome && window.chrome.webview) {
       case 'localInstallerSaved':
         handleLocalInstallerSaved(msg);
         break;
+      case 'selfUpdateStatus':
+        state.env.selfUpdate = msg.selfUpdate || null;
+        updateEnvHeader();
+        if (msg.userInitiated && state.env.selfUpdate && state.env.selfUpdate.available) {
+          openSelfUpdateModal();
+        }
+        break;
       case 'networkUpdate': {
         const wasOnline = !!state.env.hasInternet;
         state.env.hasInternet = !!msg.hasInternet;
@@ -432,9 +439,26 @@ function updateEnvHeader() {
     if (diagNet) diagNet.textContent = 'Sin conexión';
   }
 
+  const diagVer = document.getElementById('diagAppVerVal');
+  if (diagVer) diagVer.textContent = `v${state.env.appVersion || '1.1.0'}`;
+
+  const selfBtn = document.getElementById('btnSelfUpdate');
+  const selfLbl = document.getElementById('btnSelfUpdateLabel');
+  const su = state.env.selfUpdate;
+  if (selfBtn) {
+    if (su && su.available && state.env.hasInternet) {
+      if (selfLbl) selfLbl.textContent = `Actualizar qInstall ${su.tagName || ''}`.trim();
+      selfBtn.title = `Nueva versión ${su.tagName || ''} disponible (actual: v${su.currentVersion || state.env.appVersion || '1.1.0'})`;
+      selfBtn.style.display = 'inline-flex';
+    } else {
+      selfBtn.style.display = 'none';
+    }
+  }
+
   const wgBadge = document.getElementById('wingetBadge');
   const wgIcon = document.getElementById('wingetBadgeIcon');
   const btnWg = document.getElementById('btnInstallWinget');
+  const btnWgLbl = document.getElementById('btnInstallWingetLabel');
   const diagWg = document.getElementById('diagWingetVal');
   if (state.env.wingetAvailable) {
     const wgLabel = state.env.wingetVersion ? `Winget OK (${state.env.wingetVersion})` : 'Winget OK';
@@ -444,11 +468,22 @@ function updateEnvHeader() {
     if (diagWg) diagWg.textContent = state.env.wingetVersion || 'Disponible';
     btnWg.style.display = 'none';
   } else {
+    const hasOffKit = !!state.env.wingetOfflineReady;
     wgBadge.className = 'env-badge icon-pill error';
-    wgBadge.title = 'Winget no instalado';
+    wgBadge.title = hasOffKit ? 'Winget no instalado (kit offline listo en local\\winget\\)' : 'Winget no instalado';
     if (wgIcon) wgIcon.setAttribute('data-lucide', 'package-x');
-    if (diagWg) diagWg.textContent = 'No instalado';
-    btnWg.style.display = state.env.hasInternet ? 'inline-flex' : 'none';
+    if (diagWg) diagWg.textContent = hasOffKit ? 'No instalado (Kit USB listo)' : 'No instalado';
+    if (btnWgLbl) {
+      btnWgLbl.textContent = (!state.env.hasInternet && hasOffKit) ? 'Instalar Winget (Offline)' : 'Instalar Winget';
+    }
+    btnWg.style.display = (state.env.hasInternet || hasOffKit) ? 'inline-flex' : 'none';
+  }
+
+  const saveKitLbl = document.getElementById('btnSaveWingetKitLabel');
+  if (saveKitLbl) {
+    saveKitLbl.textContent = state.env.wingetOfflineReady
+      ? `Kit Winget listo (${formatBytes(state.env.wingetKitSizeBytes || 0)})`
+      : 'Guardar Winget offline';
   }
 
   const upBadge = document.getElementById('upgradeCountBadge');
@@ -528,12 +563,16 @@ function getBadgesHtml(app) {
     return `<span class="badge-group"><span class="badge badge-tool badge-compact">TOOL</span><span class="badge ${netBadge.cls} badge-compact">${netBadge.text}</span></span>`;
   }
 
+  const encKey = encodeJsArg(app.key || '');
   if (app.installed && app.hasUpdate) {
-    const vTip = `Actualización disponible: v${escapeHtml(app.installedVersion || '?')} → v${escapeHtml(app.availableVersion || '?')} (conserva tus datos)`;
-    return `<span class="badge-group"><span class="badge badge-installed badge-compact">INSTALADO</span><span class="badge badge-update badge-compact" title="${vTip}">v${escapeHtml(app.availableVersion || 'NUEVA')}</span></span>`;
+    const vTip = `Clic para actualizar de v${escapeHtml(app.installedVersion || '?')} a v${escapeHtml(app.availableVersion || '?')} (conserva tus datos)`;
+    return `<span class="badge-group"><span class="badge badge-installed badge-compact">INSTALADO</span><button type="button" class="badge badge-update badge-compact badge-update-btn" title="${vTip}" onclick="event.stopPropagation(); confirmSingleAppAction(decodeURIComponent('${encKey}'), 'update', false)">↻ v${escapeHtml(app.availableVersion || 'NUEVA')}</button></span>`;
   }
   if (app.installed) return '<span class="badge badge-installed">INSTALADO</span>';
-  if (app.outdated) return '<span class="badge badge-update">ACTUALIZAR</span>';
+  if (app.outdated) {
+    const cTip = `Clic para reemplazar caché local v${escapeHtml(app.cachedVersion || '?')} por v${escapeHtml(app.latestVersion || 'nueva')}`;
+    return `<button type="button" class="badge badge-update badge-update-btn" title="${cTip}" onclick="event.stopPropagation(); replaceSingleOutdatedCache(decodeURIComponent('${encKey}'))">ACTUALIZAR</button>`;
+  }
   if (app.hasOffline && !app.requiresInternet) return '<span class="badge badge-offline">DESCARGADO</span>';
   if (!state.env.hasInternet && app.requiresInternet) return '<span class="badge badge-nonet">SIN RED</span>';
   if (src === 'winget') return '<span class="badge badge-online">ONLINE</span>';
@@ -1497,16 +1536,22 @@ function updateStorageSettingsView() {
   listEl.innerHTML = cachedApps.map(app => {
     const enc = encodeJsArg(app.key);
     const ver = app.cachedVersion ? `v${escapeHtml(app.cachedVersion)} · ` : '';
-    const staleTag = app.outdated ? ' · OBSOLETO' : '';
+    const staleTag = app.outdated ? ` · OBSOLETO (nueva v${escapeHtml(app.latestVersion || '?')})` : '';
+    const updBtn = app.outdated
+      ? `<button class="cached-upd-btn" onclick="replaceSingleOutdatedCache(decodeURIComponent('${enc}'))" title="Descargar última versión al pendrive"><i data-lucide="refresh-cw" style="width:11px;height:11px;"></i> Actualizar</button>`
+      : '';
     return `
       <div class="cached-item">
         <div class="cached-item-info">
           <span class="cached-item-name">${escapeHtml(app.name)}</span>
           <span class="cached-item-sub">${ver}${formatBytes(app.cachedSizeBytes)}${staleTag}</span>
         </div>
-        <button class="cached-del-btn" onclick="deleteSingleCachedApp(decodeURIComponent('${enc}'))">
-          <i data-lucide="trash-2" style="width:11px;height:11px;"></i> Eliminar
-        </button>
+        <div style="display:flex; align-items:center; gap:6px;">
+          ${updBtn}
+          <button class="cached-del-btn" onclick="deleteSingleCachedApp(decodeURIComponent('${enc}'))">
+            <i data-lucide="trash-2" style="width:11px;height:11px;"></i> Eliminar
+          </button>
+        </div>
       </div>`;
   }).join('');
   refreshIcons();
@@ -1515,6 +1560,71 @@ function updateStorageSettingsView() {
 function deleteSingleCachedApp(key) {
   if (state.isBusy) return;
   postToHost({ action: 'deleteSingleCache', key });
+}
+
+function replaceSingleOutdatedCache(key) {
+  if (state.isBusy) return;
+  if (!state.env.hasInternet) {
+    showToast('Se requiere Internet para actualizar el instalador guardado en el USB.', 'warn');
+    return;
+  }
+  closePortableExportModal();
+  postToHost({ action: 'replaceOutdated', keys: [key] });
+}
+
+function replaceAllOutdatedFromStorage() {
+  if (state.isBusy) return;
+  const staleKeys = state.apps.filter(a => a.outdated).map(a => a.key);
+  if (staleKeys.length === 0) {
+    showToast('Todos tus instaladores descargados en local\\cache\\ están al día.', 'info');
+    return;
+  }
+  if (!state.env.hasInternet) {
+    showToast('Se requiere Internet para actualizar los instaladores obsoletos.', 'warn');
+    return;
+  }
+  closePortableExportModal();
+  postToHost({ action: 'replaceOutdated', keys: staleKeys });
+}
+
+function requestDownloadWingetKit() {
+  if (state.isBusy) return;
+  if (!state.env.hasInternet) {
+    showToast('Conéctate a Internet para descargar el kit offline de Winget en tu USB.', 'warn');
+    return;
+  }
+  closePortableExportModal();
+  postToHost({ action: 'downloadWingetKit' });
+}
+
+function requestCheckSelfUpdate() {
+  if (state.isBusy) return;
+  postToHost({ action: 'checkSelfUpdate' });
+}
+
+function openSelfUpdateModal() {
+  if (state.isBusy) return;
+  const su = state.env.selfUpdate;
+  if (!su || !su.available) {
+    requestCheckSelfUpdate();
+    return;
+  }
+  document.getElementById('settingsBackdrop').classList.remove('show');
+  const rawNotes = (su.notes || '').trim();
+  const shortNotes = rawNotes
+    ? `<div class="dialog-list" style="white-space:pre-wrap; font-size:11.5px; max-height:160px; overflow-y:auto;">${escapeHtml(rawNotes.slice(0, 900))}${rawNotes.length > 900 ? '…' : ''}</div>`
+    : '';
+  openDialogModal(
+    `Nueva versión de qInstall (${escapeHtml(su.tagName || su.latestVersion)})`,
+    `<p style="font-size:13px; color:var(--text-secondary);">Hay una nueva versión oficial publicada en GitHub Releases (<b>v${escapeHtml(su.currentVersion || '1.1.0')} → ${escapeHtml(su.tagName || su.latestVersion)}</b>).<br><span style="color:var(--cta-green); font-size:12px; font-weight:600;">🔒 Tus perfiles (profiles.json), apps personalizadas y carpeta local\\ de tu USB se conservan intactos.</span></p>${shortNotes}`,
+    `<button class="btn-header" onclick="closeDialogModal()">Más tarde</button>
+     <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executePerformSelfUpdate()">Actualizar y reiniciar qInstall</button>`
+  );
+}
+
+function executePerformSelfUpdate() {
+  closeDialogModal();
+  postToHost({ action: 'performSelfUpdate' });
 }
 
 function confirmUpgradeAll() {
@@ -1530,21 +1640,30 @@ function confirmUpgradeAll() {
   const updatable = state.apps.filter(a => a.installed && a.hasUpdate);
   const listHtml = updatable.length > 0
     ? `<div class="dialog-list">${updatable.map(a => `<div class="dialog-row-ok">• ${escapeHtml(a.name)} <span style="opacity:0.7;">(v${escapeHtml(a.installedVersion || '?')} → v${escapeHtml(a.availableVersion || '?')})</span></div>`).join('')}</div>`
-    : `<p style="font-size:12px; color:var(--text-muted); margin-top:6px;">No hay actualizaciones pendientes en el catálogo de qInstall; si continúas, Winget revisará también el resto de programas del sistema.</p>`;
+    : `<p style="font-size:12px; color:var(--text-muted); margin-top:6px;">No hay actualizaciones pendientes detectadas en el catálogo de qInstall; se escanearán y actualizarán los demás programas compatibles del sistema.</p>`;
+  const sysToggleHtml = updatable.length > 0
+    ? `<label class="checkbox-label" style="margin-top:10px; display:inline-flex; font-size:12px;">
+         <input type="checkbox" id="chkUpgradeIncludeSystem">
+         <span>Incluir también otros programas instalados fuera del catálogo</span>
+       </label>`
+    : `<input type="checkbox" id="chkUpgradeIncludeSystem" checked style="display:none;">`;
 
   openDialogModal(
     updatable.length > 0 ? `Actualizar aplicaciones (${updatable.length} detectadas)` : 'Buscar actualizaciones en Windows',
-    `<p style="font-size:13px; color:var(--text-secondary);">Se aplicarán las actualizaciones disponibles mediante <b>winget upgrade --all</b>.<br><span style="color:var(--cta-green); font-size:12px; font-weight:600;">🔒 Tus datos, sesiones y configuraciones se conservan: solo se actualizan los archivos del programa.</span></p>${listHtml}`,
+    `<p style="font-size:13px; color:var(--text-secondary);">Se actualizarán las aplicaciones instaladas mediante Winget.<br><span style="color:var(--cta-green); font-size:12px; font-weight:600;">🔒 Tus datos, sesiones y configuraciones se conservan: solo se actualizan los archivos del programa.</span></p>${listHtml}${sysToggleHtml}`,
     `<button class="btn-header" onclick="closeDialogModal()">Cancelar</button>
      <button class="btn-install" style="height:36px;padding:0 18px;font-size:12.5px;" onclick="executeConfirmedUpgradeAll()">Sí, actualizar ahora</button>`
   );
 }
 
 function executeConfirmedUpgradeAll() {
+  const sysEl = document.getElementById('chkUpgradeIncludeSystem');
+  const includeSystem = sysEl ? !!sysEl.checked : false;
   closeDialogModal();
   postToHost({
     action: 'upgradeAll',
-    silent: document.getElementById('chkSilent').checked
+    silent: document.getElementById('chkSilent').checked,
+    includeSystem
   });
 }
 
@@ -1623,12 +1742,21 @@ function openContextMenu(e, key) {
   if (!app) return;
   state.contextKey = key;
 
+  const canUpgrade = !!app.installed && !!app.hasUpdate;
   const canUninstall = !!app.installed && (app.source || 'winget') !== 'powershell';
   const hasCache = !!app.hasOffline && Number(app.cachedSizeBytes || 0) > 0;
 
+  const upBtn = document.getElementById('ctxUpgradeBtn');
   const unBtn = document.getElementById('ctxUninstallBtn');
   const dcBtn = document.getElementById('ctxDeleteCacheBtn');
   const sep = document.getElementById('ctxExtraSep');
+
+  if (upBtn) {
+    upBtn.style.display = canUpgrade ? 'flex' : 'none';
+    if (canUpgrade) {
+      document.getElementById('ctxUpgradeLabel').textContent = `Actualizar "${app.name}" a v${app.availableVersion || 'nueva'}`;
+    }
+  }
 
   unBtn.style.display = canUninstall ? 'flex' : 'none';
   if (canUninstall) {
@@ -1640,15 +1768,21 @@ function openContextMenu(e, key) {
     document.getElementById('ctxDeleteCacheLabel').textContent = `Borrar descargado (${formatBytes(app.cachedSizeBytes)})`;
   }
 
-  sep.style.display = (canUninstall || hasCache) ? 'block' : 'none';
+  sep.style.display = (canUpgrade || canUninstall || hasCache) ? 'block' : 'none';
   document.getElementById('ctxRemoveLabel').textContent = `Quitar "${app.name}" del catálogo`;
 
   const menu = document.getElementById('appContextMenu');
-  const menuHeight = 46 + (canUninstall ? 36 : 0) + (hasCache ? 36 : 0);
+  const menuHeight = 46 + (canUpgrade ? 36 : 0) + (canUninstall ? 36 : 0) + (hasCache ? 36 : 0);
   menu.style.left = Math.min(e.clientX, window.innerWidth - 260) + 'px';
   menu.style.top = Math.min(e.clientY, window.innerHeight - menuHeight - 12) + 'px';
   menu.classList.add('show');
 }
+
+document.getElementById('ctxUpgradeBtn').addEventListener('click', () => {
+  const k = state.contextKey;
+  document.getElementById('appContextMenu').classList.remove('show');
+  if (k) confirmSingleAppAction(k, 'update', false);
+});
 
 document.getElementById('ctxUninstallBtn').addEventListener('click', () => {
   const k = state.contextKey;

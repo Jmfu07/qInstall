@@ -106,6 +106,11 @@
       </div>
 
       <div class="header-actions">
+        <button class="btn-header self-update-cta" id="btnSelfUpdate" style="display: none;" onclick="openSelfUpdateModal()" title="Nueva versión oficial de qInstall disponible en GitHub Releases">
+          <i data-lucide="arrow-up-circle" style="width: 14px; height: 14px;"></i>
+          <span id="btnSelfUpdateLabel">Actualizar qInstall</span>
+        </button>
+
         <!-- Estado compacto de Red -->
         <div class="env-badge icon-pill" id="netBadge" title="Estado de conexión a Internet">
           <span class="dot"></span>
@@ -118,9 +123,9 @@
           <i data-lucide="package-check" id="wingetBadgeIcon" style="width: 14px; height: 14px;"></i>
         </div>
 
-        <button class="btn-header warn-cta" id="btnInstallWinget" style="display: none;" onclick="requestInstallWinget()" title="Instalar Winget automáticamente">
+        <button class="btn-header warn-cta" id="btnInstallWinget" style="display: none;" onclick="requestInstallWinget()" title="Instalar Winget y sus dependencias automáticamente">
           <i data-lucide="download" style="width: 14px; height: 14px;"></i>
-          <span>Instalar Winget</span>
+          <span id="btnInstallWingetLabel">Instalar Winget</span>
         </button>
 
         <!-- Selector de Tema (compacto) -->
@@ -381,6 +386,10 @@
 
   <!-- MENÚ CONTEXTUAL CLIC DERECHO -->
   <div class="context-menu" id="appContextMenu">
+    <button class="context-item" id="ctxUpgradeBtn" style="display: none; color: #60a5fa;">
+      <i data-lucide="arrow-up-circle" style="width: 14px; height: 14px;"></i>
+      <span id="ctxUpgradeLabel">Actualizar aplicación</span>
+    </button>
     <button class="context-item warn" id="ctxUninstallBtn" style="display: none;">
       <i data-lucide="package-x" style="width: 14px; height: 14px;"></i>
       <span id="ctxUninstallLabel">Desinstalar aplicación</span>
@@ -411,6 +420,10 @@
           <div class="settings-group-title">Estado del Entorno</div>
           <div class="env-diag-grid">
             <div class="env-diag-item">
+              <span class="env-diag-k">qInstall</span>
+              <span class="env-diag-v" id="diagAppVerVal">v1.1.0</span>
+            </div>
+            <div class="env-diag-item">
               <span class="env-diag-k">Internet</span>
               <span class="env-diag-v" id="diagNetVal">Verificando...</span>
             </div>
@@ -422,6 +435,9 @@
               <span class="env-diag-k">Perfiles</span>
               <span class="env-diag-v">profiles.json</span>
             </div>
+          </div>
+          <div class="settings-actions-row" style="margin-top: 6px;">
+            <button class="btn-tool" onclick="requestCheckSelfUpdate()"><i data-lucide="refresh-cw" style="width: 14px;"></i> Buscar actualización de qInstall</button>
           </div>
         </div>
 
@@ -490,6 +506,7 @@
           <div class="settings-actions-row">
             <button class="btn-tool" onclick="postToHost({ action: 'openLocalFolder' })"><i data-lucide="folder-open" style="width: 14px;"></i> Abrir local\</button>
             <button class="btn-tool" onclick="closePortableExportModal(); requestAddLocalInstaller();"><i data-lucide="folder-plus" style="width: 14px;"></i> + Instalador local</button>
+            <button class="btn-tool" id="btnSaveWingetKit" onclick="requestDownloadWingetKit()" title="Descarga Winget + dependencias VCLibs y UI.Xaml a local\winget\ para poder instalar Winget en PCs recién formateadas sin Internet"><i data-lucide="package-plus" style="width: 14px;"></i> <span id="btnSaveWingetKitLabel">Guardar Winget offline</span></button>
           </div>
         </div>
 
@@ -499,6 +516,7 @@
             <div style="font-size:11.5px; color:var(--text-muted); padding:6px;">No hay instaladores descargados en local\cache\.</div>
           </div>
           <div class="settings-actions-row">
+            <button class="btn-tool" onclick="replaceAllOutdatedFromStorage()"><i data-lucide="refresh-cw" style="width: 14px;"></i> Actualizar obsoletos</button>
             <button class="btn-tool" onclick="postToHost({ action: 'purgeOutdated' })"><i data-lucide="sparkles" style="width: 14px;"></i> Purgar obsoletos</button>
             <button class="btn-tool" onclick="closePortableExportModal(); confirmPurgeOfflineCache();"><i data-lucide="trash-2" style="width: 14px;"></i> Eliminar todos</button>
           </div>

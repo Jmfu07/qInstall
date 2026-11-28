@@ -355,7 +355,9 @@ namespace Qinstall
                 _lblWingetStatus.Text = "Winget no encontrado";
                 _lblWingetStatus.BackColor = Color.FromArgb(110, 42, 46);
                 _lblWingetStatus.ForeColor = Color.FromArgb(255, 200, 200);
-                _btnInstallWinget.Visible = online;
+                bool hasOfflineKit = InstallerEngine.HasOfflineWingetKit();
+                _btnInstallWinget.Text = (!online && hasOfflineKit) ? "Instalar Winget (Offline)" : "Instalar Winget";
+                _btnInstallWinget.Visible = online || hasOfflineKit;
                 AppendLog("[!] Winget no esta disponible en este equipo. Puedes instalarlo con el boton 'Instalar Winget' o usar instaladores locales.");
             }
 
@@ -1401,7 +1403,12 @@ namespace Qinstall
                 _lblStatus.Text = string.Format("Instalando ({0}/{1}): {2}...", i + 1, selected.Count, app.Name);
                 _progressBar.Value = i * 100;
 
-                InstallResult res = await _engine.InstallAppAsync(app, silent, upgrade);
+                string appKey = GetAppKey(app);
+                bool isAlreadyInstalled = _installedApps.Contains(appKey);
+                InstallResult res = (upgrade && isAlreadyInstalled && onlineNow && _wingetAvailable &&
+                                     string.Equals(app.Source ?? "winget", "winget", StringComparison.OrdinalIgnoreCase))
+                    ? await _engine.UpgradeSingleAppAsync(app, silent)
+                    : await _engine.InstallAppAsync(app, silent, upgrade);
                 results.Add(res);
 
                 if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)

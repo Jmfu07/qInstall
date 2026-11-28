@@ -1,9 +1,15 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
+
+[assembly: AssemblyTitle("qInstall")]
+[assembly: AssemblyProduct("qInstall")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace Qinstall
 {
@@ -23,6 +29,8 @@ namespace Qinstall
             {
             }
 
+            CleanupOldSelfUpdateBinary();
+
             // Habilitar TLS 1.2 y conexiones paralelas rapidas para descargas HTTPS modernas en .NET Framework 4.8
             ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
             ServicePointManager.DefaultConnectionLimit = 32;
@@ -38,6 +46,23 @@ namespace Qinstall
             else
             {
                 Application.Run(new MainForm());
+            }
+        }
+
+        private static void CleanupOldSelfUpdateBinary()
+        {
+            try
+            {
+                string baseDir = AppCatalog.GetAppBaseDirectory();
+                if (string.IsNullOrEmpty(baseDir) || !Directory.Exists(baseDir)) return;
+                string[] oldFiles = Directory.GetFiles(baseDir, "*.exe.old");
+                for (int i = 0; i < oldFiles.Length; i++)
+                {
+                    try { File.Delete(oldFiles[i]); } catch { }
+                }
+            }
+            catch
+            {
             }
         }
 

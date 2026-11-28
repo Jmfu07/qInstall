@@ -72,28 +72,31 @@ jobs:
           $shaPath = "${{ steps.pkg.outputs.sha_path }}"
 
           $lines = @(
-            "## qInstall $tag — Primera Release Oficial (100% Portable)",
+            "## qInstall $tag — Release Oficial (100% Portable)",
             "",
             "**Instalador por lotes 100% portable para USB, SSD y HDD (internos o externos) en Windows 10 / 11 (64-bit).**",
             "",
             "### Novedades principales",
-            "- **Catálogo de 176 aplicaciones en 14 categorías:** Navegadores, Utilidades, Optimización, Arranque y Reparación, Soporte y Drivers, Multimedia (HandBrake, Kdenlive, Shotcut, CapCut, GIMP, Inkscape, Krita, Blender, Darktable, Scribus, Adobe CC), Comunicación, Oficina (Office 2016-2024 ODT, LibreOffice, PDFgear), IA y Agentes (ChatGPT, Claude, Gemini, Antigravity, Cursor, Windsurf/Devin, Ollama, Grammarly, Otter.ai...), IDEs y JetBrains, Desarrollo, Juegos, Runtimes y Java.",
-            "- **Descarga Turbo + Modo Offline real:** Descarga instaladores (.exe, .msi, .msix, .appx, .zip) a local\cache\ con 4 conexiones paralelas + 2 apps simultáneas, verificación SHA256, staging en %TEMP% y recuperación automática de versión anterior ante HTTP 404.",
-            "- **Desinstalador Universal de 5 capas:** Winget (con reintento interactivo), ID real ARP/MSIX, Microsoft Store (Remove-AppxPackage), Registro nativo de Windows (100% offline) y herramientas .zip portables.",
-            "- **Auto-sincronización en segundo plano:** Detecta automáticamente Wi-Fi (con SSID) / Ethernet, cambios en local\ y actualizaciones reales vía winget upgrade conservando tus datos y configuraciones.",
-            "- **Interfaz WebView2 100% Offline:** 138 íconos locales, temas Oscuro / Claro / Sistema, vistas Galería y Tabla (con acciones directas de 1 clic), barra Nyan Cat a 60 fps y respaldo automático nativo WinForms.",
-            "- **Panel Almacenamiento integrado:** Copia qInstall limpio a cualquier USB, SSD o HDD (mínimo 2 GB, recomendado 4 GB+) con perfiles portables en profiles.json.",
+            "- **Instalador de Winget multicapa + Kit Offline en USB (local\winget\):** Instala automáticamente las dependencias obligatorias (VCLibs 14, UI.Xaml 2.8 / WindowsAppRuntime), soporta equipos recién formateados, Windows LTSC y sesiones elevadas como Administrador (DISM + Licencia oficial), y guarda el kit en el USB para reutilizarlo sin Internet.",
+            "- **Motor de Actualizaciones renovado:** Detección precisa en español/inglés (IDs truncados con '…', versiones 'Desconocida' contrastadas con el Registro de Windows), actualización individual en 1 clic desde Galería/Tabla/menú contextual, respaldo automático con winget install --force y actualización de instaladores offline obsoletos.",
+            "- **Auto-actualización integrada de qInstall:** Comprueba nuevas versiones desde GitHub Releases (Jmfu07/qInstall) y se actualiza en caliente conservando profiles.json, apps personalizadas y local\.",
+            "- **Catálogo de 176 aplicaciones en 14 categorías** + **Descarga Turbo** + **Desinstalador Universal de 5 capas**.",
             "",
             "### Cómo usar",
             "1. Descarga **qInstall-$tag-win-x64-portable.zip** abajo.",
             "2. Extrae la carpeta qInstall/ en tu **USB, SSD o HDD**.",
             "3. Ejecuta **Qinstall.exe** (solicitará permisos de Administrador).",
             "",
-            "> Verificado en hardware real (incluyendo memoria USB 2.0 Patriot de 4 GB de hace 18 años) · Compilado y validado con **14/14 pruebas QA en verde**."
+            "> Verificado en hardware real · Compilado y validado con la suite QA automatizada en verde."
           )
 
           $notesFile = Join-Path $env:RUNNER_TEMP "release_notes.md"
           ($lines -join "`n") | Set-Content -Path $notesFile -Encoding UTF8
+
+          gh release view "$tag" > $null 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete "$tag" --yes
+          }
 
           gh release create "$tag" "$zipPath" "$shaPath" `
             --title "qInstall $tag — Portable Batch Installer (Windows x64)" `

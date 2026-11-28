@@ -6,9 +6,11 @@
 local/*.exe
 local/*.msi
 local/cache/
+local/winget/
 office/Office/
 *.pdb
 *.bak
+*.old
 *.log
 bin/
 obj/

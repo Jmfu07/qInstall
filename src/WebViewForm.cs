@@ -31,6 +31,7 @@ namespace Qinstall
         private readonly HashSet<string> _installedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, OfflineCacheUpdateInfo> _outdatedCaches = new Dictionary<string, OfflineCacheUpdateInfo>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, InstalledUpdateInfo> _availableUpdates = new Dictionary<string, InstalledUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+        private SelfUpdateInfo _selfUpdateInfo;
         private bool _hasInternet = true;
         private string _networkLabel = string.Empty;
         private System.Windows.Forms.Timer _netDebounceTimer;
@@ -480,6 +481,15 @@ namespace Qinstall
                     case "installWinget":
                         await HandleInstallWingetAsync();
                         break;
+                    case "downloadWingetKit":
+                        await HandleDownloadWingetKitAsync();
+                        break;
+                    case "checkSelfUpdate":
+                        await HandleCheckSelfUpdateAsync(true);
+                        break;
+                    case "performSelfUpdate":
+                        await HandlePerformSelfUpdateAsync();
+                        break;
                     case "runAsAdmin":
                         if (InstallerEngine.RelaunchAsAdministrator())
                         {
@@ -590,17 +600,16 @@ namespace Qinstall
             _availableUpdates.Clear();
             if (_hasInternet && _wingetAvailable)
             {
-                Task<Dictionary<string, OfflineCacheUpdateInfo>> outdatedTask = _engine.CheckOutdatedOfflineCachesAsync(allApps);
-                Task<Dictionary<string, InstalledUpdateInfo>> updatesTask = _engine.DetectAvailableUpdatesAsync(allApps);
-                Dictionary<string, OfflineCacheUpdateInfo> outdated = await outdatedTask;
-                Dictionary<string, InstalledUpdateInfo> availUpd = await updatesTask;
-                foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
-                {
-                    _outdatedCaches[kv.Key] = kv.Value;
-                }
+                // Ejecutar primero DetectAvailableUpdatesAsync para refrescar el indice SQLite de Winget una sola vez sin contencion
+                Dictionary<string, InstalledUpdateInfo> availUpd = await _engine.DetectAvailableUpdatesAsync(allApps);
                 foreach (KeyValuePair<string, InstalledUpdateInfo> kv in availUpd)
                 {
                     _availableUpdates[kv.Key] = kv.Value;
+                }
+                Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
+                {
+                    _outdatedCaches[kv.Key] = kv.Value;
                 }
             }
 
@@ -617,7 +626,8 @@ namespace Qinstall
             });
 
             PostLog(string.Format(
-                "Entorno listo: Internet={0}, Winget={1}, {2} apps en catalogo, {3} detectadas instaladas.",
+                "Entorno listo: qInstall v{0}, Internet={1}, Winget={2}, {3} apps en catalogo, {4} detectadas instaladas.",
+                InstallerEngine.CurrentAppVersion,
                 _hasInternet ? "OK" : "OFFLINE",
                 _wingetAvailable ? _wingetVersion : "No disponible",
                 allApps.Count,
@@ -626,6 +636,11 @@ namespace Qinstall
             if (_outdatedCaches.Count > 0)
             {
                 PostOutdatedAlert(_outdatedCaches);
+            }
+
+            if (_hasInternet)
+            {
+                CheckSelfUpdateInBackgroundAsync();
             }
         }
 
@@ -655,17 +670,15 @@ namespace Qinstall
                 _availableUpdates.Clear();
                 if (_hasInternet && _wingetAvailable)
                 {
-                    Task<Dictionary<string, OfflineCacheUpdateInfo>> outdatedTask = _engine.CheckOutdatedOfflineCachesAsync(allApps);
-                    Task<Dictionary<string, InstalledUpdateInfo>> updatesTask = _engine.DetectAvailableUpdatesAsync(allApps);
-                    Dictionary<string, OfflineCacheUpdateInfo> outdated = await outdatedTask;
-                    Dictionary<string, InstalledUpdateInfo> availUpd = await updatesTask;
-                    foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
-                    {
-                        _outdatedCaches[kv.Key] = kv.Value;
-                    }
+                    Dictionary<string, InstalledUpdateInfo> availUpd = await _engine.DetectAvailableUpdatesAsync(allApps);
                     foreach (KeyValuePair<string, InstalledUpdateInfo> kv in availUpd)
                     {
                         _availableUpdates[kv.Key] = kv.Value;
+                    }
+                    Dictionary<string, OfflineCacheUpdateInfo> outdated = await _engine.CheckOutdatedOfflineCachesAsync(allApps);
+                    foreach (KeyValuePair<string, OfflineCacheUpdateInfo> kv in outdated)
+                    {
+                        _outdatedCaches[kv.Key] = kv.Value;
                     }
                 }
 
@@ -1130,17 +1143,31 @@ namespace Qinstall
                 for (int i = 0; i < selected.Count; i++)
                 {
                     AppItem app = selected[i];
+                    string key = GetAppKey(app);
                     int basePct = (int)Math.Round(((double)i / selected.Count) * 100.0);
-                    PostProgress(true, "install", basePct, string.Format("Instalando ({0}/{1}): {2}...", i + 1, selected.Count, app.Name));
+                    bool alreadyInstalled = _installedKeys.Contains(key);
+                    bool shouldUpgradeOnline = upgrade && alreadyInstalled && _hasInternet && _wingetAvailable &&
+                                               string.Equals(app.Source ?? "winget", "winget", StringComparison.OrdinalIgnoreCase);
 
-                    InstallResult res = await _engine.InstallAppAsync(app, silent, upgrade);
+                    PostProgress(
+                        true,
+                        "install",
+                        basePct,
+                        string.Format(shouldUpgradeOnline ? "Actualizando ({0}/{1}): {2}..." : "Instalando ({0}/{1}): {2}...", i + 1, selected.Count, app.Name));
+
+                    InstallResult res = shouldUpgradeOnline
+                        ? await _engine.UpgradeSingleAppAsync(app, silent)
+                        : await _engine.InstallAppAsync(app, silent, upgrade);
                     results.Add(res);
 
                     if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
                     {
-                        string key = GetAppKey(app);
                         bool isTool = string.Equals(app.Source, "powershell", StringComparison.OrdinalIgnoreCase);
                         if (!isTool) _installedKeys.Add(key);
+                        if (shouldUpgradeOnline || res.Status == InstallStatus.Success)
+                        {
+                            _availableUpdates.Remove(key);
+                        }
                         PostAppUpdated(app, !isTool, InstallerEngine.HasOfflineCache(app), _outdatedCaches.ContainsKey(key), true);
                     }
 
@@ -1372,24 +1399,74 @@ namespace Qinstall
         {
             if (_isBusy) return;
             _isBusy = true;
+            _engine.ResetCancellation();
             bool ok = false;
             try
             {
-                PostProgress(true, "install", 30, "Descargando e instalando Winget desde Microsoft...");
+                bool hasLocalKit = InstallerEngine.HasOfflineWingetKit();
+                PostProgress(
+                    true,
+                    "install",
+                    20,
+                    hasLocalKit
+                        ? "Instalando Winget y sus dependencias desde local\\winget\\..."
+                        : "Descargando e instalando Winget + dependencias (VCLibs + UI.Xaml)...");
                 ok = await _engine.InstallWingetAsync();
             }
             finally
             {
                 _isBusy = false;
             }
-            PostProgress(false, "idle", ok ? 100 : 0, ok ? "Winget instalado correctamente." : "No se pudo instalar Winget.");
+            PostProgress(false, "idle", ok ? 100 : 0, ok ? "Winget instalado y verificado correctamente." : "No se pudo instalar Winget.");
             if (ok)
             {
+                PostToast("Winget instalado y listo (kit guardado para uso offline).", "success");
                 await HandleRefreshAsync();
             }
             else
             {
-                PostToast("No se pudo instalar Winget automaticamente.", "warn");
+                PostStateUpdate();
+                PostToast("No se pudo instalar Winget automaticamente (revisa el registro para detalles).", "warn");
+            }
+        }
+
+        private async Task HandleDownloadWingetKitAsync()
+        {
+            if (_isBusy) return;
+            bool onlineNow = await InstallerEngine.CheckInternetAsync();
+            _hasInternet = onlineNow;
+            if (!onlineNow)
+            {
+                PostStateUpdate();
+                PostToast("Se requiere Internet para descargar el kit offline de Winget al USB.", "warn");
+                return;
+            }
+
+            _isBusy = true;
+            _engine.ResetCancellation();
+            bool ok = false;
+            try
+            {
+                PostProgress(true, "download", 5, "Descargando kit completo de Winget + dependencias a local\\winget\\...");
+                ok = await _engine.DownloadWingetOfflineKitAsync(delegate(int pct)
+                {
+                    PostProgress(true, "download", Math.Max(5, Math.Min(99, pct)), "Guardando kit offline de Winget en local\\winget\\ (" + pct + "%)...");
+                });
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+
+            PostProgress(false, "idle", ok ? 100 : 0, ok ? "Kit offline de Winget guardado en local\\winget\\." : "No se pudo guardar el kit offline de Winget.");
+            PostStateUpdate();
+            if (ok)
+            {
+                PostToast("Kit de Winget + dependencias guardado en local\\winget\\ para equipos sin Internet.", "success");
+            }
+            else
+            {
+                PostToast("No se pudo descargar el kit offline de Winget.", "warn");
             }
         }
 
@@ -1496,7 +1573,8 @@ namespace Qinstall
                 PostToast("Se requiere conexion a Internet para actualizar " + target.Name + ".", "warn");
                 return;
             }
-            if (!_wingetAvailable)
+            string src = (target.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src == "winget" && !_wingetAvailable)
             {
                 PostToast("Winget no esta disponible en este equipo.", "warn");
                 return;
@@ -1539,6 +1617,7 @@ namespace Qinstall
         {
             if (_isBusy) return;
             bool silent = GetBool(msg, "silent", true);
+            bool includeSystem = GetBool(msg, "includeSystem", false);
 
             PostProgress(false, "idle", 0, "Verificando red y Winget...");
             bool onlineNow = await InstallerEngine.CheckInternetAsync();
@@ -1555,29 +1634,179 @@ namespace Qinstall
                 return;
             }
 
+            List<AppItem> catalogTargets = new List<AppItem>();
+            List<AppItem> allApps = GetAllApps();
+            for (int i = 0; i < allApps.Count; i++)
+            {
+                string k = GetAppKey(allApps[i]);
+                if (_installedKeys.Contains(k) && _availableUpdates.ContainsKey(k))
+                {
+                    catalogTargets.Add(allApps[i]);
+                }
+            }
+
             _isBusy = true;
             _engine.ResetCancellation();
-            int code = -1;
+            List<InstallResult> catalogResults = new List<InstallResult>();
+            int sysCode = 0;
+            bool ranSystemScan = false;
+
             try
             {
-                PostProgress(true, "install", 35, "Actualizando todas las aplicaciones instaladas via Winget...");
-                code = await _engine.UpgradeAllInstalledAsync(silent);
+                if (catalogTargets.Count > 0)
+                {
+                    for (int i = 0; i < catalogTargets.Count; i++)
+                    {
+                        AppItem app = catalogTargets[i];
+                        string key = GetAppKey(app);
+                        int maxScale = includeSystem ? 75 : 100;
+                        int pct = Math.Max(5, (int)Math.Round(((double)i / catalogTargets.Count) * maxScale));
+                        PostProgress(true, "install", pct, string.Format("Actualizando ({0}/{1}): {2}...", i + 1, catalogTargets.Count, app.Name));
+
+                        InstallResult res = await _engine.UpgradeSingleAppAsync(app, silent);
+                        catalogResults.Add(res);
+
+                        if (res.Status == InstallStatus.Success || res.Status == InstallStatus.AlreadyInstalled)
+                        {
+                            _availableUpdates.Remove(key);
+                            _installedKeys.Add(key);
+                            PostAppUpdated(app, true, InstallerEngine.HasOfflineCache(app), _outdatedCaches.ContainsKey(key), true);
+                        }
+
+                        if (res.Status == InstallStatus.Cancelled)
+                        {
+                            sysCode = -2;
+                            break;
+                        }
+                    }
+                }
+
+                if (sysCode != -2 && (includeSystem || catalogTargets.Count == 0))
+                {
+                    ranSystemScan = true;
+                    PostProgress(true, "install", catalogTargets.Count > 0 ? 80 : 30, "Buscando y aplicando actualizaciones del resto del sistema via Winget...");
+                    sysCode = await _engine.UpgradeAllInstalledAsync(silent);
+                }
             }
             finally
             {
                 _isBusy = false;
             }
 
-            if (code == -2)
+            if (sysCode == -2)
             {
                 PostProgress(false, "idle", 0, "Actualizacion masiva cancelada.");
                 PostToast("Actualizacion masiva cancelada.", "warn");
                 return;
             }
 
-            PostProgress(false, "idle", 100, code == 0 ? "Actualizacion masiva completada." : "Actualizacion finalizada con avisos.");
-            PostToast(code == 0 ? "Todas las aplicaciones compatibles fueron actualizadas." : "Actualizacion completada (revisa el registro para detalles).", code == 0 ? "success" : "info");
-            await HandleRefreshAsync();
+            PostProgress(false, "idle", 100, "Actualizacion completada.");
+            if (catalogResults.Count > 0 && !ranSystemScan)
+            {
+                PostSummary(catalogResults, false);
+            }
+            else
+            {
+                PostToast(sysCode == 0 ? "Todas las aplicaciones compatibles fueron actualizadas." : "Actualizacion completada (revisa el registro para detalles).", sysCode == 0 ? "success" : "info");
+                await HandleRefreshAsync();
+            }
+        }
+
+        private async void CheckSelfUpdateInBackgroundAsync()
+        {
+            await HandleCheckSelfUpdateAsync(false);
+        }
+
+        private async Task HandleCheckSelfUpdateAsync(bool userInitiated)
+        {
+            if (userInitiated)
+            {
+                bool onlineNow = await InstallerEngine.CheckInternetAsync();
+                _hasInternet = onlineNow;
+                if (!onlineNow)
+                {
+                    PostStateUpdate();
+                    PostToast("Se requiere Internet para buscar actualizaciones de qInstall en GitHub.", "warn");
+                    return;
+                }
+                PostToast("Buscando nueva version de qInstall en GitHub Releases...", "info");
+            }
+
+            SelfUpdateInfo info = await _engine.CheckSelfUpdateAsync();
+            if (this.IsDisposed) return;
+            _selfUpdateInfo = info;
+
+            PostMessage(new Dictionary<string, object>
+            {
+                { "type", "selfUpdateStatus" },
+                { "selfUpdate", BuildSelfUpdateDto() },
+                { "userInitiated", userInitiated }
+            });
+
+            if (info != null && info.Available)
+            {
+                PostLog(string.Format("[*] Nueva version de qInstall disponible en GitHub: {0} (actual: v{1}).", info.TagName, info.CurrentVersion), "info");
+            }
+            else if (userInitiated)
+            {
+                PostToast("Ya tienes la ultima version de qInstall (v" + InstallerEngine.CurrentAppVersion + ").", "success");
+            }
+        }
+
+        private async Task HandlePerformSelfUpdateAsync()
+        {
+            if (_isBusy) return;
+            bool onlineNow = await InstallerEngine.CheckInternetAsync();
+            _hasInternet = onlineNow;
+            if (!onlineNow)
+            {
+                PostStateUpdate();
+                PostToast("Se requiere Internet para descargar la actualizacion de qInstall.", "warn");
+                return;
+            }
+
+            if (_selfUpdateInfo == null || !_selfUpdateInfo.Available)
+            {
+                _selfUpdateInfo = await _engine.CheckSelfUpdateAsync();
+                if (_selfUpdateInfo == null || !_selfUpdateInfo.Available)
+                {
+                    PostToast("qInstall ya esta en su ultima version (v" + InstallerEngine.CurrentAppVersion + ").", "info");
+                    return;
+                }
+            }
+
+            _isBusy = true;
+            _engine.ResetCancellation();
+            bool ok = false;
+            try
+            {
+                PostProgress(true, "download", 5, "Descargando qInstall " + _selfUpdateInfo.TagName + " desde GitHub Releases...");
+                ok = await _engine.PerformSelfUpdateAsync(_selfUpdateInfo, delegate(int pct)
+                {
+                    PostProgress(
+                        true,
+                        "download",
+                        Math.Max(5, Math.Min(100, pct)),
+                        pct < 85
+                            ? string.Format("Descargando qInstall {0} ({1}%)...", _selfUpdateInfo.TagName, pct)
+                            : "Aplicando actualizacion portable y conservando tus datos...");
+                });
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+
+            if (ok)
+            {
+                PostProgress(false, "idle", 100, "Reiniciando en la nueva version de qInstall...");
+                Application.Exit();
+            }
+            else
+            {
+                PostProgress(false, "idle", 0, "No se pudo actualizar qInstall.");
+                PostToast("No se pudo aplicar la actualizacion de qInstall (revisa el registro).", "warn");
+            }
         }
 
         private async Task HandleCreateRestorePointAsync()
@@ -2216,15 +2445,19 @@ namespace Qinstall
                 { "storage", BuildStorageInfo() },
                 { "env", new Dictionary<string, object>
                     {
+                        { "appVersion", InstallerEngine.CurrentAppVersion },
                         { "hasInternet", _hasInternet },
                         { "networkLabel", _networkLabel ?? string.Empty },
                         { "wingetAvailable", _wingetAvailable },
                         { "wingetVersion", _wingetVersion },
+                        { "wingetOfflineReady", InstallerEngine.HasOfflineWingetKit() },
+                        { "wingetKitSizeBytes", InstallerEngine.GetOfflineWingetKitSizeBytes() },
                         { "isAdmin", InstallerEngine.IsAdministrator() },
                         { "localDir", AppCatalog.GetLocalInstallersDirectory() },
                         { "installedCount", _installedKeys.Count },
                         { "outdatedCount", _outdatedCaches.Count },
-                        { "updatesCount", _availableUpdates.Count }
+                        { "updatesCount", _availableUpdates.Count },
+                        { "selfUpdate", BuildSelfUpdateDto() }
                     }
                 }
             };
@@ -2234,6 +2467,31 @@ namespace Qinstall
                 statePayload["profiles"] = portableProfiles;
             }
             PostMessage(statePayload);
+        }
+
+        private Dictionary<string, object> BuildSelfUpdateDto()
+        {
+            if (_selfUpdateInfo == null)
+            {
+                return new Dictionary<string, object>
+                {
+                    { "available", false },
+                    { "currentVersion", InstallerEngine.CurrentAppVersion },
+                    { "latestVersion", InstallerEngine.CurrentAppVersion },
+                    { "tagName", "v" + InstallerEngine.CurrentAppVersion },
+                    { "releaseUrl", "https://github.com/" + InstallerEngine.GithubRepoSlug + "/releases/latest" },
+                    { "notes", string.Empty }
+                };
+            }
+            return new Dictionary<string, object>
+            {
+                { "available", _selfUpdateInfo.Available },
+                { "currentVersion", _selfUpdateInfo.CurrentVersion ?? InstallerEngine.CurrentAppVersion },
+                { "latestVersion", _selfUpdateInfo.LatestVersion ?? InstallerEngine.CurrentAppVersion },
+                { "tagName", _selfUpdateInfo.TagName ?? ("v" + InstallerEngine.CurrentAppVersion) },
+                { "releaseUrl", _selfUpdateInfo.ReleaseUrl ?? string.Empty },
+                { "notes", _selfUpdateInfo.Notes ?? string.Empty }
+            };
         }
 
         private void PostAppUpdated(AppItem app, bool installed, bool hasOffline, bool outdated, bool uncheck)

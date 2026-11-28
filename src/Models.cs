@@ -180,7 +180,11 @@ namespace Qinstall
 
         public static void Save(AppCatalog catalog)
         {
-            string path = GetCatalogPath();
+            Save(catalog, GetCatalogPath());
+        }
+
+        public static void Save(AppCatalog catalog, string path)
+        {
             string formatted = FormatCatalogJson(catalog);
             File.WriteAllText(path, formatted, new UTF8Encoding(false));
         }

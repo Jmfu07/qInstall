@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -11,6 +12,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using Microsoft.Win32;
 
 namespace Qinstall
@@ -29,8 +31,26 @@ namespace Qinstall
         public string LatestVersion { get; set; }
     }
 
+    public class SelfUpdateInfo
+    {
+        public bool Available { get; set; }
+        public string CurrentVersion { get; set; }
+        public string LatestVersion { get; set; }
+        public string TagName { get; set; }
+        public string DownloadUrl { get; set; }
+        public string ReleaseUrl { get; set; }
+        public string Notes { get; set; }
+    }
+
     public class InstallerEngine
     {
+        public const string CurrentAppVersion = "1.1.0";
+        public const string GithubRepoSlug = "Jmfu07/qInstall";
+
+        private static readonly object _wingetResolveLock = new object();
+        private static string _resolvedWingetExe;
+        private static string _resolvedWingetExtraPath;
+
         private readonly object _lock = new object();
         private readonly List<Process> _activeProcesses = new List<Process>();
         private readonly List<HttpWebRequest> _activeRequests = new List<HttpWebRequest>();
@@ -71,15 +91,119 @@ namespace Qinstall
             }
         }
 
-        public static string GetWingetVersion()
+        public static void InvalidateWingetCache()
+        {
+            lock (_wingetResolveLock)
+            {
+                _resolvedWingetExe = null;
+                _resolvedWingetExtraPath = null;
+            }
+        }
+
+        private static string BuildWindowsAppsRuntimeExtraPath(string wingetExePath)
+        {
+            List<string> dirs = new List<string>();
+            try
+            {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (!string.IsNullOrEmpty(localAppData))
+                {
+                    string userWinApps = Path.Combine(localAppData, "Microsoft", "WindowsApps");
+                    if (Directory.Exists(userWinApps)) dirs.Add(userWinApps);
+                }
+
+                if (!string.IsNullOrEmpty(wingetExePath) && Path.IsPathRooted(wingetExePath))
+                {
+                    string exeDir = Path.GetDirectoryName(wingetExePath);
+                    if (!string.IsNullOrEmpty(exeDir) && Directory.Exists(exeDir))
+                    {
+                        dirs.Add(exeDir);
+                    }
+                }
+
+                string pf = Environment.GetEnvironmentVariable("ProgramFiles");
+                if (string.IsNullOrEmpty(pf)) pf = @"C:\Program Files";
+                string sysWinApps = Path.Combine(pf, "WindowsApps");
+                if (Directory.Exists(sysWinApps))
+                {
+                    string[] patterns = new[]
+                    {
+                        "Microsoft.VCLibs.140.00.UWPDesktop_*_x64__*",
+                        "Microsoft.VCLibs.140.00_*_x64__*",
+                        "Microsoft.WindowsAppRuntime.*_x64__*",
+                        "Microsoft.UI.Xaml.2.8_*_x64__*"
+                    };
+                    for (int p = 0; p < patterns.Length; p++)
+                    {
+                        try
+                        {
+                            string[] matches = Directory.GetDirectories(sysWinApps, patterns[p]);
+                            Array.Sort(matches, StringComparer.OrdinalIgnoreCase);
+                            for (int m = matches.Length - 1; m >= 0; m--)
+                            {
+                                dirs.Add(matches[m]);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+
+            return dirs.Count > 0 ? string.Join(";", dirs.ToArray()) : string.Empty;
+        }
+
+        private static void ConfigureWingetProcessStartInfo(ProcessStartInfo psi)
+        {
+            if (psi == null) return;
+            string fn = (psi.FileName ?? string.Empty).Trim();
+            if (!string.Equals(fn, "winget", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(fn, "winget.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string resolvedExe = null;
+            string extraPath = null;
+            lock (_wingetResolveLock)
+            {
+                resolvedExe = _resolvedWingetExe;
+                extraPath = _resolvedWingetExtraPath;
+            }
+
+            if (!string.IsNullOrEmpty(resolvedExe))
+            {
+                psi.FileName = resolvedExe;
+            }
+            if (!string.IsNullOrEmpty(extraPath))
+            {
+                try
+                {
+                    string curPath = psi.EnvironmentVariables["PATH"] ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                    psi.EnvironmentVariables["PATH"] = extraPath + ";" + curPath;
+                }
+                catch { }
+            }
+        }
+
+        private static string ProbeWingetCandidate(string candidateExe, string extraPath)
         {
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo("winget", "--version");
+                ProcessStartInfo psi = new ProcessStartInfo(candidateExe, "--version");
                 psi.UseShellExecute = false;
                 psi.RedirectStandardOutput = true;
                 psi.RedirectStandardError = true;
                 psi.CreateNoWindow = true;
+                if (!string.IsNullOrEmpty(extraPath))
+                {
+                    try
+                    {
+                        string curPath = psi.EnvironmentVariables["PATH"] ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                        psi.EnvironmentVariables["PATH"] = extraPath + ";" + curPath;
+                    }
+                    catch { }
+                }
 
                 using (Process p = Process.Start(psi))
                 {
@@ -92,13 +216,102 @@ namespace Qinstall
                     }
                     if (p.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
                     {
-                        return output.Trim();
+                        string ver = output.Trim();
+                        if (ver.IndexOf('\n') >= 0) ver = ver.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
+                        return ver;
                     }
                 }
             }
             catch
             {
             }
+            return null;
+        }
+
+        public static string GetWingetVersion()
+        {
+            string cachedExe = null;
+            string cachedExtra = null;
+            lock (_wingetResolveLock)
+            {
+                cachedExe = _resolvedWingetExe;
+                cachedExtra = _resolvedWingetExtraPath;
+            }
+            if (!string.IsNullOrEmpty(cachedExe))
+            {
+                string quickVer = ProbeWingetCandidate(cachedExe, cachedExtra);
+                if (!string.IsNullOrEmpty(quickVer)) return quickVer;
+            }
+
+            List<string> candidates = new List<string>();
+            candidates.Add("winget");
+
+            try
+            {
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (!string.IsNullOrEmpty(localAppData))
+                {
+                    string aliasPath = Path.Combine(localAppData, "Microsoft", "WindowsApps", "winget.exe");
+                    candidates.Add(aliasPath);
+                }
+            }
+            catch { }
+
+            try
+            {
+                string pf = Environment.GetEnvironmentVariable("ProgramFiles");
+                if (string.IsNullOrEmpty(pf)) pf = @"C:\Program Files";
+                string sysWinApps = Path.Combine(pf, "WindowsApps");
+                if (Directory.Exists(sysWinApps))
+                {
+                    string[] dirs = Directory.GetDirectories(sysWinApps, "Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe");
+                    Array.Sort(dirs, StringComparer.OrdinalIgnoreCase);
+                    for (int i = dirs.Length - 1; i >= 0; i--)
+                    {
+                        string wg = Path.Combine(dirs[i], "winget.exe");
+                        if (File.Exists(wg)) candidates.Add(wg);
+                        string legacyCli = Path.Combine(dirs[i], "AppInstallerCLI.exe");
+                        if (File.Exists(legacyCli)) candidates.Add(legacyCli);
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                string sysDrive = Environment.GetEnvironmentVariable("SystemDrive");
+                if (string.IsNullOrEmpty(sysDrive)) sysDrive = "C:";
+                string usersRoot = Path.Combine(sysDrive + "\\", "Users");
+                if (Directory.Exists(usersRoot))
+                {
+                    string[] userDirs = Directory.GetDirectories(usersRoot);
+                    for (int i = 0; i < userDirs.Length; i++)
+                    {
+                        string uAlias = Path.Combine(userDirs[i], "AppData", "Local", "Microsoft", "WindowsApps", "winget.exe");
+                        if (File.Exists(uAlias)) candidates.Add(uAlias);
+                    }
+                }
+            }
+            catch { }
+
+            HashSet<string> tried = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                string cand = candidates[i];
+                if (string.IsNullOrEmpty(cand) || !tried.Add(cand)) continue;
+                string extra = BuildWindowsAppsRuntimeExtraPath(cand);
+                string ver = ProbeWingetCandidate(cand, extra);
+                if (!string.IsNullOrEmpty(ver))
+                {
+                    lock (_wingetResolveLock)
+                    {
+                        _resolvedWingetExe = cand;
+                        _resolvedWingetExtraPath = extra;
+                    }
+                    return ver;
+                }
+            }
+
             return null;
         }
 
@@ -417,17 +630,29 @@ namespace Qinstall
                 string dir = Path.GetDirectoryName(installerPath);
                 if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
                 {
-                    string[] yamls = Directory.GetFiles(dir, "*.yaml");
-                    for (int i = 0; i < yamls.Length; i++)
+                    // Priorizar qinstall_meta.yaml si existe, luego cualquier manifiesto .yaml de winget download
+                    string metaYaml = Path.Combine(dir, "qinstall_meta.yaml");
+                    List<string> yamlFiles = new List<string>();
+                    if (File.Exists(metaYaml)) yamlFiles.Add(metaYaml);
+                    string[] otherYamls = Directory.GetFiles(dir, "*.yaml");
+                    for (int y = 0; y < otherYamls.Length; y++)
                     {
-                        string[] lines = File.ReadAllLines(yamls[i], Encoding.UTF8);
+                        if (!string.Equals(otherYamls[y], metaYaml, StringComparison.OrdinalIgnoreCase))
+                        {
+                            yamlFiles.Add(otherYamls[y]);
+                        }
+                    }
+
+                    for (int i = 0; i < yamlFiles.Count; i++)
+                    {
+                        string[] lines = File.ReadAllLines(yamlFiles[i], Encoding.UTF8);
                         for (int l = 0; l < lines.Length; l++)
                         {
                             string trimmed = lines[l].Trim();
                             if (trimmed.StartsWith("PackageVersion:", StringComparison.OrdinalIgnoreCase))
                             {
                                 string val = trimmed.Substring(15).Trim().Trim('\'', '"');
-                                if (!string.IsNullOrEmpty(val)) return val;
+                                if (!string.IsNullOrEmpty(val)) return NormalizeVersionDisplay(val);
                             }
                         }
                     }
@@ -441,14 +666,49 @@ namespace Qinstall
             try
             {
                 FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(installerPath);
-                if (!string.IsNullOrWhiteSpace(fvi.ProductVersion)) return fvi.ProductVersion.Trim();
-                if (!string.IsNullOrWhiteSpace(fvi.FileVersion)) return fvi.FileVersion.Trim();
+                if (!string.IsNullOrWhiteSpace(fvi.ProductVersion)) return NormalizeVersionDisplay(fvi.ProductVersion);
+                if (!string.IsNullOrWhiteSpace(fvi.FileVersion)) return NormalizeVersionDisplay(fvi.FileVersion);
             }
             catch
             {
             }
 
             return string.Empty;
+        }
+
+        public static string NormalizeVersionDisplay(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+            string s = raw.Trim();
+            if (s.StartsWith("<")) s = s.Substring(1).Trim();
+            if ((s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) && s.Length > 1 && char.IsDigit(s[1]))
+            {
+                s = s.Substring(1).Trim();
+            }
+            int plusIdx = s.IndexOf('+');
+            if (plusIdx > 0) s = s.Substring(0, plusIdx).Trim();
+            // Convertir formato Win32 "1, 2, 3, 0" -> "1.2.3.0"
+            if (s.IndexOf(',') >= 0)
+            {
+                s = s.Replace(", ", ".").Replace(",", ".");
+            }
+            int spIdx = s.IndexOf(' ');
+            if (spIdx > 0)
+            {
+                string firstTok = s.Substring(0, spIdx).Trim();
+                if (firstTok.Length > 0 && char.IsDigit(firstTok[0])) s = firstTok;
+            }
+            return s;
+        }
+
+        public static bool IsUnknownVersionToken(string ver)
+        {
+            if (string.IsNullOrWhiteSpace(ver)) return true;
+            string t = ver.Trim();
+            return t.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ||
+                   t.StartsWith("Desconocid", StringComparison.OrdinalIgnoreCase) ||
+                   t.Equals("?", StringComparison.Ordinal) ||
+                   t.Equals("-", StringComparison.Ordinal);
         }
 
         public async Task<string> GetWingetLatestVersionAsync(string packageId)
@@ -461,21 +721,25 @@ namespace Qinstall
                 safeId,
                 pkgSource);
 
-            string output = await RunQuickQueryAsync("winget", args, 8000);
-            if (string.IsNullOrEmpty(output)) return string.Empty;
-
-            string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < lines.Length; i++)
+            for (int attempt = 0; attempt < 2; attempt++)
             {
-                string line = lines[i].Trim();
-                if (line.StartsWith("Version:", StringComparison.OrdinalIgnoreCase) ||
-                    line.StartsWith("Versi", StringComparison.OrdinalIgnoreCase))
+                if (attempt > 0) await Task.Delay(600);
+                string output = await RunQuickQueryAsync("winget", args, 20000);
+                if (string.IsNullOrEmpty(output)) continue;
+
+                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                for (int i = 0; i < lines.Length; i++)
                 {
-                    int colon = line.IndexOf(':');
-                    if (colon >= 0)
+                    string line = lines[i].Trim();
+                    if (line.StartsWith("Version:", StringComparison.OrdinalIgnoreCase) ||
+                        line.StartsWith("Versi", StringComparison.OrdinalIgnoreCase))
                     {
-                        string v = line.Substring(colon + 1).Trim();
-                        if (!string.IsNullOrEmpty(v)) return v;
+                        int colon = line.IndexOf(':');
+                        if (colon >= 0)
+                        {
+                            string v = line.Substring(colon + 1).Trim();
+                            if (!string.IsNullOrEmpty(v) && !IsUnknownVersionToken(v)) return v;
+                        }
                     }
                 }
             }
@@ -484,13 +748,14 @@ namespace Qinstall
 
         public static bool IsVersionOlder(string localVersion, string latestVersion)
         {
-            if (string.IsNullOrWhiteSpace(localVersion) || string.IsNullOrWhiteSpace(latestVersion))
+            if (IsUnknownVersionToken(localVersion) || IsUnknownVersionToken(latestVersion))
             {
                 return false;
             }
 
-            string a = localVersion.Trim();
-            string b = latestVersion.Trim();
+            string a = NormalizeVersionDisplay(localVersion);
+            string b = NormalizeVersionDisplay(latestVersion);
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
             if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return false;
 
             string[] partsA = a.Split(new[] { '.', '-', '_', ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -511,6 +776,11 @@ namespace Qinstall
                 }
                 else
                 {
+                    // Si un segmento es "0" implicito y el otro es pre-release (ej. "beta", "rc1"),
+                    // la version base sin sufijo NO es mas antigua que su pre-release (1.0.0 vs 1.0.0-beta)
+                    if (i >= partsA.Length && !long.TryParse(pb, out nb)) return false;
+                    if (i >= partsB.Length && !long.TryParse(pa, out na)) return true;
+
                     int cmp = string.Compare(pa, pb, StringComparison.OrdinalIgnoreCase);
                     if (cmp < 0) return true;
                     if (cmp > 0) return false;
@@ -542,9 +812,9 @@ namespace Qinstall
 
             if (candidates.Count == 0) return outdated;
 
-            // Optimizacion: consultar hasta 4 paquetes Winget en paralelo para acelerar el arranque
+            // Consultar hasta 3 paquetes Winget en paralelo evitando contencion excesiva de la base SQLite de Winget
             object dictLock = new object();
-            using (SemaphoreSlim sem = new SemaphoreSlim(4, 4))
+            using (SemaphoreSlim sem = new SemaphoreSlim(3, 3))
             {
                 List<Task> tasks = new List<Task>();
                 for (int i = 0; i < candidates.Count; i++)
@@ -1073,19 +1343,32 @@ namespace Qinstall
                 return MakeResult(app, InstallStatus.Failed, "Aplicacion invalida para actualizar");
             }
             string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+            if (src == "url")
+            {
+                return await InstallViaUrlAsync(app, silent);
+            }
             if (src != "winget")
             {
                 return await InstallAppAsync(app, silent, true);
             }
 
+            string targetId = app.Target.Trim();
+            if (string.Equals(targetId, "Microsoft.EdgeWebView2Runtime", StringComparison.OrdinalIgnoreCase))
+            {
+                EmitLog("[!] Omitiendo actualizacion en caliente de WebView2 Runtime porque qInstall lo esta usando actualmente.");
+                return MakeResult(app, InstallStatus.AlreadyInstalled, "En uso por qInstall (actualizalo desde Windows Update)");
+            }
+
             EmitLog("--------------------------------------------------");
-            EmitLog("[*] Actualizando en su sitio (conservando tus datos): " + app.Name + " (" + app.Target + ")");
-            string pkgSource = GetWingetSourceName(app.Target);
+            EmitLog("[*] Actualizando en su sitio (conservando tus datos): " + app.Name + " (" + targetId + ")");
+            string pkgSource = GetWingetSourceName(targetId);
             string silentFlag = silent ? " --silent" : string.Empty;
+            string sourceFlag = pkgSource == "msstore" ? " --source msstore" : string.Empty;
+
             string args = string.Format(
-                "upgrade --id \"{0}\" --exact --source {1}{2} --accept-package-agreements --accept-source-agreements --disable-interactivity",
-                app.Target.Trim(),
-                pkgSource,
+                "upgrade --id \"{0}\" --exact{1}{2} --include-unknown --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                targetId,
+                sourceFlag,
                 silentFlag);
 
             StringBuilder output = new StringBuilder();
@@ -1094,18 +1377,387 @@ namespace Qinstall
             {
                 return MakeResult(app, InstallStatus.Cancelled, "Actualizacion cancelada");
             }
+
+            string outText = output.ToString();
+            // Si Winget reporta ambiguedad entre multiples origenes, reintentar especificando --source winget
+            if (exitCode != 0 && exitCode != -1978335189 && string.IsNullOrEmpty(sourceFlag) &&
+                (exitCode == -1978335211 ||
+                 outText.IndexOf("Multiple installed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 outText.IndexOf("Varios paquetes", StringComparison.OrdinalIgnoreCase) >= 0))
+            {
+                string retrySourceArgs = string.Format(
+                    "upgrade --id \"{0}\" --exact --source {1}{2} --include-unknown --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                    targetId,
+                    pkgSource,
+                    silentFlag);
+                output = new StringBuilder();
+                exitCode = await RunProcessAsync("winget", retrySourceArgs, output);
+                if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Actualizacion cancelada");
+                outText = output.ToString();
+            }
+
             if (exitCode == 0)
             {
                 EmitLog("[OK] " + app.Name + " actualizada correctamente (datos y configuraciones conservados).");
                 return MakeResult(app, InstallStatus.Success, "Actualizada a la ultima version");
             }
-            if (exitCode == -1978335189)
+            if (exitCode == -1978335189 ||
+                outText.IndexOf("No available upgrade", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                outText.IndexOf("No applicable update", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 EmitLog("[=] " + app.Name + " ya esta en su ultima version.");
                 return MakeResult(app, InstallStatus.AlreadyInstalled, "Ya esta al dia");
             }
+
+            // Respaldo 1: si fue instalada fuera de Winget (ARP no correlacionado: -1978335212), instalar encima con --force conservando datos
+            if (exitCode == -1978335212 ||
+                outText.IndexOf("No installed package", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                outText.IndexOf("No se encontr", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                EmitLog("[*] Paquete instalado fuera de Winget; aplicando ultima version encima con winget install --force...");
+                string forceInstallArgs = string.Format(
+                    "install --id \"{0}\" --exact --source {1}{2} --force --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                    targetId,
+                    pkgSource,
+                    silentFlag);
+                StringBuilder forceOut = new StringBuilder();
+                int forceCode = await RunProcessAsync("winget", forceInstallArgs, forceOut);
+                if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Actualizacion cancelada");
+                if (forceCode == 0)
+                {
+                    EmitLog("[OK] " + app.Name + " actualizada correctamente mediante instalacion directa.");
+                    return MakeResult(app, InstallStatus.Success, "Actualizada a la ultima version");
+                }
+            }
+
+            // Respaldo 2: si fallo en modo silencioso, reintentar sin --silent para instaladores que exigen ventana
+            if (silent && !_cancelRequested)
+            {
+                EmitLog("[!] El actualizador rechazo el modo silencioso; reintentando actualizacion asistida...");
+                string interactiveArgs = string.Format(
+                    "upgrade --id \"{0}\" --exact --source {1} --include-unknown --accept-package-agreements --accept-source-agreements",
+                    targetId,
+                    pkgSource);
+                StringBuilder intOut = new StringBuilder();
+                int intCode = await RunProcessAsync("winget", interactiveArgs, intOut);
+                if (_cancelRequested) return MakeResult(app, InstallStatus.Cancelled, "Actualizacion cancelada");
+                if (intCode == 0)
+                {
+                    EmitLog("[OK] " + app.Name + " actualizada correctamente.");
+                    return MakeResult(app, InstallStatus.Success, "Actualizada a la ultima version");
+                }
+            }
+
             EmitLog(string.Format("[X] Error actualizando {0} (codigo {1}).", app.Name, exitCode));
             return MakeResult(app, InstallStatus.Failed, "Error de Winget al actualizar (codigo " + exitCode + ")");
+        }
+
+        private static int FindColumnStartAny(string headerLine, string[] candidates)
+        {
+            if (string.IsNullOrEmpty(headerLine) || candidates == null) return -1;
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                int idx = FindColumnStart(headerLine, candidates[i]);
+                if (idx >= 0) return idx;
+            }
+            return -1;
+        }
+
+        private static string SliceColumnSafe(string line, int startCol, int nextCol)
+        {
+            if (string.IsNullOrEmpty(line) || startCol < 0 || startCol >= line.Length) return string.Empty;
+            if (nextCol > startCol)
+            {
+                int len = Math.Min(nextCol - startCol, line.Length - startCol);
+                return len > 0 ? line.Substring(startCol, len).Trim() : string.Empty;
+            }
+            return line.Substring(startCol).Trim();
+        }
+
+        private static Dictionary<string, string> CollectRegistryDisplayVersions()
+        {
+            Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            RegistryKey[] roots = new[] { Registry.LocalMachine, Registry.CurrentUser };
+            string[] subPaths = new[]
+            {
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            };
+
+            for (int r = 0; r < roots.Length; r++)
+            {
+                for (int p = 0; p < subPaths.Length; p++)
+                {
+                    try
+                    {
+                        using (RegistryKey parent = roots[r].OpenSubKey(subPaths[p]))
+                        {
+                            if (parent == null) continue;
+                            string[] subKeys = parent.GetSubKeyNames();
+                            for (int i = 0; i < subKeys.Length; i++)
+                            {
+                                try
+                                {
+                                    using (RegistryKey sk = parent.OpenSubKey(subKeys[i]))
+                                    {
+                                        if (sk == null) continue;
+                                        object dnObj = sk.GetValue("DisplayName");
+                                        object dvObj = sk.GetValue("DisplayVersion");
+                                        if (dnObj == null || dvObj == null) continue;
+                                        string dn = dnObj.ToString().Trim();
+                                        string dv = dvObj.ToString().Trim();
+                                        if (!string.IsNullOrEmpty(dn) && !string.IsNullOrEmpty(dv))
+                                        {
+                                            string existing;
+                                            if (!map.TryGetValue(dn, out existing) || IsVersionOlder(existing, dv))
+                                            {
+                                                map[dn] = dv;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            return map;
+        }
+
+        private static string FindRegistryVersionForApp(AppItem app, string wingetRowName, Dictionary<string, string> registryVersions)
+        {
+            if (registryVersions == null || registryVersions.Count == 0) return string.Empty;
+            string exact;
+            if (!string.IsNullOrWhiteSpace(wingetRowName))
+            {
+                string cleanRow = wingetRowName.TrimEnd('\u2026', '.').Trim();
+                if (registryVersions.TryGetValue(cleanRow, out exact)) return exact;
+                foreach (KeyValuePair<string, string> kv in registryVersions)
+                {
+                    if (cleanRow.Length >= 4 && kv.Key.StartsWith(cleanRow, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return kv.Value;
+                    }
+                }
+            }
+            if (app != null && !string.IsNullOrWhiteSpace(app.Name))
+            {
+                string appName = app.Name.Trim();
+                if (registryVersions.TryGetValue(appName, out exact)) return exact;
+                foreach (KeyValuePair<string, string> kv in registryVersions)
+                {
+                    if (kv.Key.StartsWith(appName + " ", StringComparison.OrdinalIgnoreCase) ||
+                        kv.Key.StartsWith(appName + "-", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return kv.Value;
+                    }
+                }
+            }
+            return string.Empty;
+        }
+
+        public static List<InstalledUpdateInfo> ParseRawWingetUpgradeRows(string output)
+        {
+            List<InstalledUpdateInfo> rows = new List<InstalledUpdateInfo>();
+            if (string.IsNullOrWhiteSpace(output)) return rows;
+
+            string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            int headerIdx = -1;
+            int idCol = -1;
+            int verCol = -1;
+            int availCol = -1;
+            int srcCol = -1;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                int candId = FindColumnStart(line, "Id");
+                int candAvail = FindColumnStartAny(line, new[] { "Available", "Disponible" });
+                if (candId > 0 && candAvail > candId)
+                {
+                    headerIdx = i;
+                    idCol = candId;
+                    verCol = FindColumnStartAny(line, new[] { "Version", "Versi\u00f3n", "Versi" });
+                    availCol = candAvail;
+                    srcCol = FindColumnStartAny(line, new[] { "Source", "Origen" });
+                    break;
+                }
+            }
+
+            if (headerIdx < 0 || idCol <= 0) return rows;
+
+            int startRow = headerIdx + 1;
+            for (int i = headerIdx + 1; i < Math.Min(lines.Length, headerIdx + 4); i++)
+            {
+                if (lines[i].TrimStart().StartsWith("---", StringComparison.Ordinal))
+                {
+                    startRow = i + 1;
+                    break;
+                }
+            }
+
+            for (int i = startRow; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                string trimmed = line.Trim();
+                if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("---", StringComparison.Ordinal)) continue;
+                if (trimmed.IndexOf("upgrades available", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    trimmed.IndexOf("actualizaciones disponibles", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    trimmed.IndexOf("upgrade available", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    trimmed.IndexOf("actualizaci\u00f3n disponible", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    trimmed.IndexOf("package(s) have version", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    trimmed.IndexOf("tienen n\u00fameros de versi", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+                if (line.Length <= idCol) continue;
+
+                string rowName = line.Substring(0, Math.Min(idCol, line.Length)).Trim();
+                string pkgId = string.Empty;
+                string curVer = string.Empty;
+                string availVer = string.Empty;
+
+                // Intentar extraccion exacta por columnas fijas si los indices son consistentes
+                if (verCol > idCol && availCol > verCol && line.Length > availCol)
+                {
+                    pkgId = SliceColumnSafe(line, idCol, verCol);
+                    curVer = SliceColumnSafe(line, verCol, availCol);
+                    availVer = SliceColumnSafe(line, availCol, srcCol > availCol ? srcCol : -1);
+                    if (srcCol <= 0 && availVer.IndexOf(' ') > 0)
+                    {
+                        string[] avParts = availVer.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (avParts.Length >= 2 &&
+                            (string.Equals(avParts[avParts.Length - 1], "winget", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(avParts[avParts.Length - 1], "msstore", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            availVer = avParts[0];
+                        }
+                    }
+                }
+
+                // Respaldo por tokens si caracteres anchos desplazaron las columnas
+                if (string.IsNullOrEmpty(pkgId) || string.IsNullOrEmpty(availVer) || pkgId.IndexOf(' ') >= 0)
+                {
+                    string rest = line.Substring(idCol).Trim();
+                    string[] tokens = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (tokens.Length < 3) continue;
+                    pkgId = tokens[0].Trim();
+                    int idx = 1;
+                    if (tokens[idx] == "<" && tokens.Length >= 4) idx++;
+                    curVer = tokens[idx].Trim();
+                    availVer = (idx + 1 < tokens.Length) ? tokens[idx + 1].Trim() : string.Empty;
+                }
+
+                if (curVer.StartsWith("<")) curVer = curVer.Substring(1).Trim();
+                if (string.IsNullOrEmpty(pkgId) || string.IsNullOrEmpty(availVer)) continue;
+                string cleanCheck = pkgId.TrimEnd('\u2026', '.');
+                if (cleanCheck.IndexOf('.') < 0 && cleanCheck.Length < 8) continue;
+
+                InstalledUpdateInfo info = new InstalledUpdateInfo();
+                info.Name = rowName;
+                info.Id = pkgId;
+                info.CurrentVersion = curVer;
+                info.AvailableVersion = availVer;
+                rows.Add(info);
+            }
+
+            return rows;
+        }
+
+        public static Dictionary<string, InstalledUpdateInfo> ParseWingetUpgradeOutput(
+            string output,
+            List<AppItem> apps,
+            Dictionary<string, string> registryVersions)
+        {
+            Dictionary<string, InstalledUpdateInfo> result = new Dictionary<string, InstalledUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+            if (apps == null || apps.Count == 0 || string.IsNullOrWhiteSpace(output)) return result;
+
+            List<InstalledUpdateInfo> rawRows = ParseRawWingetUpgradeRows(output);
+            if (rawRows.Count == 0) return result;
+
+            Dictionary<string, InstalledUpdateInfo> byExactId = new Dictionary<string, InstalledUpdateInfo>(StringComparer.OrdinalIgnoreCase);
+            List<InstalledUpdateInfo> truncatedRows = new List<InstalledUpdateInfo>();
+
+            for (int i = 0; i < rawRows.Count; i++)
+            {
+                InstalledUpdateInfo r = rawRows[i];
+                if (r.Id.EndsWith("\u2026", StringComparison.Ordinal) || r.Id.EndsWith("...", StringComparison.Ordinal))
+                {
+                    truncatedRows.Add(r);
+                }
+                else
+                {
+                    byExactId[r.Id] = r;
+                }
+            }
+
+            for (int i = 0; i < apps.Count; i++)
+            {
+                AppItem app = apps[i];
+                if (app == null || string.IsNullOrWhiteSpace(app.Target)) continue;
+                string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
+                if (src != "winget") continue;
+
+                string target = app.Target.Trim();
+                InstalledUpdateInfo matched = null;
+                if (!byExactId.TryGetValue(target, out matched))
+                {
+                    for (int t = 0; t < truncatedRows.Count; t++)
+                    {
+                        string prefix = truncatedRows[t].Id.TrimEnd('\u2026', '.');
+                        if (prefix.Length >= 10 && target.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            matched = truncatedRows[t];
+                            break;
+                        }
+                    }
+                }
+
+                if (matched == null) continue;
+
+                string curVer = matched.CurrentVersion;
+                string availVer = matched.AvailableVersion;
+                if (IsUnknownVersionToken(availVer)) continue;
+
+                if (IsUnknownVersionToken(curVer))
+                {
+                    string regVer = FindRegistryVersionForApp(app, matched.Name, registryVersions);
+                    if (!string.IsNullOrEmpty(regVer))
+                    {
+                        // Evitar falso positivo de --include-unknown cuando la version instalada en Registro ya esta al dia
+                        if (!IsVersionOlder(regVer, availVer))
+                        {
+                            continue;
+                        }
+                        curVer = NormalizeVersionDisplay(regVer);
+                    }
+                    else
+                    {
+                        curVer = "?";
+                    }
+                }
+                else
+                {
+                    curVer = NormalizeVersionDisplay(curVer);
+                    if (!IsVersionOlder(curVer, availVer))
+                    {
+                        continue;
+                    }
+                }
+
+                InstalledUpdateInfo finalUpd = new InstalledUpdateInfo();
+                finalUpd.Name = matched.Name;
+                finalUpd.Id = target;
+                finalUpd.CurrentVersion = curVer;
+                finalUpd.AvailableVersion = NormalizeVersionDisplay(availVer);
+
+                string key = (app.Id ?? app.Name ?? string.Empty) + "|" + target;
+                result[key] = finalUpd;
+            }
+
+            return result;
         }
 
         public async Task<Dictionary<string, InstalledUpdateInfo>> DetectAvailableUpdatesAsync(List<AppItem> apps)
@@ -1117,69 +1769,12 @@ namespace Qinstall
             {
                 string output = await RunQuickQueryAsync(
                     "winget",
-                    "upgrade --accept-source-agreements --disable-interactivity",
-                    14000);
+                    "upgrade --include-unknown --accept-source-agreements --disable-interactivity",
+                    45000);
                 if (string.IsNullOrWhiteSpace(output)) return result;
 
-                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                int headerIdx = -1;
-                int idCol = -1;
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string line = lines[i];
-                    bool hasId = line.IndexOf("Id", StringComparison.OrdinalIgnoreCase) >= 0;
-                    bool hasAvail = line.IndexOf("Available", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                    line.IndexOf("Disponible", StringComparison.OrdinalIgnoreCase) >= 0;
-                    if (hasId && hasAvail)
-                    {
-                        headerIdx = i;
-                        idCol = FindColumnStart(line, "Id");
-                        break;
-                    }
-                }
-                if (headerIdx < 0 || idCol <= 0) return result;
-
-                Dictionary<string, InstalledUpdateInfo> byPkgId = new Dictionary<string, InstalledUpdateInfo>(StringComparer.OrdinalIgnoreCase);
-                for (int i = headerIdx + 2; i < lines.Length; i++)
-                {
-                    string line = lines[i];
-                    if (line.Length <= idCol || line.StartsWith("---")) continue;
-                    string rest = line.Substring(idCol).Trim();
-                    string[] tokens = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (tokens.Length < 3) continue;
-
-                    string pkgId = tokens[0].Trim();
-                    string curVer = tokens[1].Trim();
-                    string availVer = tokens[2].Trim();
-                    if (curVer == "<" && tokens.Length >= 4)
-                    {
-                        curVer = tokens[2].Trim();
-                        availVer = tokens[3].Trim();
-                    }
-                    if (string.IsNullOrEmpty(pkgId) || string.IsNullOrEmpty(availVer)) continue;
-                    if (pkgId.IndexOf('.') < 0 && pkgId.Length < 8) continue;
-
-                    InstalledUpdateInfo info = new InstalledUpdateInfo();
-                    info.Id = pkgId;
-                    info.CurrentVersion = curVer;
-                    info.AvailableVersion = availVer;
-                    byPkgId[pkgId] = info;
-                }
-
-                for (int i = 0; i < apps.Count; i++)
-                {
-                    AppItem app = apps[i];
-                    if (app == null || string.IsNullOrWhiteSpace(app.Target)) continue;
-                    string src = (app.Source ?? "winget").Trim().ToLowerInvariant();
-                    if (src != "winget") continue;
-
-                    InstalledUpdateInfo upd;
-                    if (byPkgId.TryGetValue(app.Target.Trim(), out upd))
-                    {
-                        string key = (app.Id ?? app.Name ?? string.Empty) + "|" + (app.Target ?? string.Empty);
-                        result[key] = upd;
-                    }
-                }
+                Dictionary<string, string> regVersions = CollectRegistryDisplayVersions();
+                return ParseWingetUpgradeOutput(output, apps, regVersions);
             }
             catch
             {
@@ -1191,23 +1786,89 @@ namespace Qinstall
         public async Task<int> UpgradeAllInstalledAsync(bool silent)
         {
             EmitLog("--------------------------------------------------");
-            EmitLog("[*] Buscando y aplicando actualizaciones de todas las apps instaladas (winget upgrade --all)...");
-            string silentFlag = silent ? " --silent" : string.Empty;
-            string args = "upgrade --all --source winget" + silentFlag + " --accept-package-agreements --accept-source-agreements --disable-interactivity";
-            StringBuilder output = new StringBuilder();
-            int code = await RunProcessAsync("winget", args, output);
+            EmitLog("[*] Escaneando actualizaciones pendientes del sistema en Winget...");
+            string listOutput = await RunQuickQueryAsync(
+                "winget",
+                "upgrade --include-unknown --accept-source-agreements --disable-interactivity",
+                45000);
+
             if (_cancelRequested)
             {
                 EmitLog("[!] Actualizacion masiva cancelada por el usuario.");
                 return -2;
             }
-            if (code == 0 || code == -1978335189)
+
+            List<InstalledUpdateInfo> rawRows = ParseRawWingetUpgradeRows(listOutput);
+            Dictionary<string, string> regVersions = CollectRegistryDisplayVersions();
+            List<InstalledUpdateInfo> safeTargets = new List<InstalledUpdateInfo>();
+
+            for (int i = 0; i < rawRows.Count; i++)
             {
-                EmitLog("[OK] Actualizacion masiva finalizada.");
+                InstalledUpdateInfo row = rawRows[i];
+                if (string.IsNullOrEmpty(row.Id)) continue;
+                // No matar WebView2 ni el propio DesktopAppInstaller mientras qInstall esta abierto
+                if (row.Id.IndexOf("EdgeWebView2Runtime", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    row.Id.IndexOf("DesktopAppInstaller", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+                if (row.Id.EndsWith("\u2026", StringComparison.Ordinal) || row.Id.EndsWith("...", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (IsUnknownVersionToken(row.AvailableVersion)) continue;
+                if (IsUnknownVersionToken(row.CurrentVersion))
+                {
+                    string regVer = FindRegistryVersionForApp(null, row.Name, regVersions);
+                    if (string.IsNullOrEmpty(regVer) || !IsVersionOlder(regVer, row.AvailableVersion))
+                    {
+                        continue;
+                    }
+                }
+                else if (!IsVersionOlder(row.CurrentVersion, row.AvailableVersion))
+                {
+                    continue;
+                }
+                safeTargets.Add(row);
+            }
+
+            if (safeTargets.Count == 0)
+            {
+                EmitLog("[=] Todos los paquetes compatibles del sistema estan al dia.");
                 return 0;
             }
-            EmitLog("[X] winget upgrade --all finalizo con codigo: " + code);
-            return code;
+
+            int failed = 0;
+            string silentFlag = silent ? " --silent" : string.Empty;
+            for (int i = 0; i < safeTargets.Count; i++)
+            {
+                if (_cancelRequested)
+                {
+                    EmitLog("[!] Actualizacion masiva cancelada por el usuario.");
+                    return -2;
+                }
+                InstalledUpdateInfo item = safeTargets[i];
+                EmitLog(string.Format("[*] Actualizando paquete del sistema ({0}/{1}): {2} ({3})", i + 1, safeTargets.Count, string.IsNullOrEmpty(item.Name) ? item.Id : item.Name, item.Id));
+                string uArgs = string.Format(
+                    "upgrade --id \"{0}\" --exact{1} --include-unknown --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                    item.Id,
+                    silentFlag);
+                StringBuilder uOut = new StringBuilder();
+                int uCode = await RunProcessAsync("winget", uArgs, uOut);
+                if (_cancelRequested) return -2;
+                if (uCode != 0 && uCode != -1978335189)
+                {
+                    failed++;
+                }
+            }
+
+            if (failed == 0)
+            {
+                EmitLog("[OK] Actualizacion masiva del sistema finalizada sin errores.");
+                return 0;
+            }
+            EmitLog(string.Format("[!] Actualizacion masiva finalizada ({0} paquete(s) no pudieron actualizarse silenciosamente).", failed));
+            return failed;
         }
 
         public async Task<bool> CreateSystemRestorePointAsync(string description)
@@ -1258,6 +1919,33 @@ namespace Qinstall
             {
             }
             return string.Empty;
+        }
+
+        private async Task EnsureOfflineVersionMetadataAsync(AppItem app, string cacheDir, string knownVersion)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(cacheDir) || !Directory.Exists(cacheDir)) return;
+                string existingVer = GetCachedOfflineVersion(app);
+                if (!string.IsNullOrEmpty(existingVer) && File.Exists(Path.Combine(cacheDir, "qinstall_meta.yaml")))
+                {
+                    return;
+                }
+                string verToSave = !string.IsNullOrWhiteSpace(knownVersion) ? knownVersion.Trim() : existingVer;
+                if (string.IsNullOrEmpty(verToSave) && app != null && !string.IsNullOrWhiteSpace(app.Target))
+                {
+                    verToSave = await GetWingetLatestVersionAsync(app.Target);
+                }
+                if (!string.IsNullOrEmpty(verToSave))
+                {
+                    string metaPath = Path.Combine(cacheDir, "qinstall_meta.yaml");
+                    if (!File.Exists(metaPath))
+                    {
+                        File.WriteAllText(metaPath, "PackageVersion: " + NormalizeVersionDisplay(verToSave) + Environment.NewLine, new UTF8Encoding(false));
+                    }
+                }
+            }
+            catch { }
         }
 
         public Task<InstallResult> DownloadForOfflineAsync(AppItem app)
@@ -1329,6 +2017,7 @@ namespace Qinstall
                     string downloadedFile = FindCachedInstallerPath(app);
                     if (code == 0 && !string.IsNullOrEmpty(downloadedFile))
                     {
+                        await EnsureOfflineVersionMetadataAsync(app, cacheDir, null);
                         EmitLog("[OK] Guardado offline en: " + downloadedFile);
                         return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(downloadedFile) + ")");
                     }
@@ -1383,6 +2072,7 @@ namespace Qinstall
                             string prevFile = FindCachedInstallerPath(app);
                             if (prevCode == 0 && !string.IsNullOrEmpty(prevFile))
                             {
+                                await EnsureOfflineVersionMetadataAsync(app, cacheDir, fallbackVer);
                                 EmitLog("[OK] Guardado offline (v" + fallbackVer + ") en: " + prevFile);
                                 return MakeResult(app, InstallStatus.Success, "Guardado en local\\cache (" + Path.GetFileName(prevFile) + " · v" + fallbackVer + ")");
                             }
@@ -1553,34 +2243,770 @@ namespace Qinstall
             }
         }
 
+        public static string GetWingetOfflineKitDirectory()
+        {
+            return Path.Combine(AppCatalog.GetLocalInstallersDirectory(), "winget");
+        }
+
+        public static string FindExistingWingetKitDirectory()
+        {
+            string relDir = Path.Combine("local", "winget");
+            List<string> candidates = new List<string>();
+            string baseDir = AppCatalog.GetAppBaseDirectory();
+            candidates.Add(Path.Combine(baseDir, relDir));
+            try
+            {
+                string root = Path.GetPathRoot(baseDir);
+                if (!string.IsNullOrEmpty(root)) candidates.Add(Path.Combine(root, relDir));
+            }
+            catch { }
+            try
+            {
+                DriveInfo[] drives = DriveInfo.GetDrives();
+                for (int i = 0; i < drives.Length; i++)
+                {
+                    if (drives[i].DriveType == DriveType.Removable && drives[i].IsReady)
+                    {
+                        candidates.Add(Path.Combine(drives[i].RootDirectory.FullName, relDir));
+                    }
+                }
+            }
+            catch { }
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (IsWingetKitDirectoryComplete(candidates[i]))
+                {
+                    return candidates[i];
+                }
+            }
+            return null;
+        }
+
+        private static bool IsWingetKitDirectoryComplete(string kitDir)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(kitDir) || !Directory.Exists(kitDir)) return false;
+                string bundle = Path.Combine(kitDir, "Microsoft.DesktopAppInstaller.msixbundle");
+                if (!File.Exists(bundle) || new FileInfo(bundle).Length < 1024 * 1024) return false;
+
+                string depsDir = Path.Combine(kitDir, "deps");
+                if (!Directory.Exists(depsDir)) return false;
+                string[] deps = Directory.GetFiles(depsDir);
+                int validDeps = 0;
+                for (int i = 0; i < deps.Length; i++)
+                {
+                    string ext = Path.GetExtension(deps[i]).ToLowerInvariant();
+                    if ((ext == ".appx" || ext == ".msix") && new FileInfo(deps[i]).Length > 50 * 1024)
+                    {
+                        validDeps++;
+                    }
+                }
+                return validDeps >= 2;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool HasOfflineWingetKit()
+        {
+            return !string.IsNullOrEmpty(FindExistingWingetKitDirectory());
+        }
+
+        public static long GetOfflineWingetKitSizeBytes()
+        {
+            string dir = FindExistingWingetKitDirectory();
+            return !string.IsNullOrEmpty(dir) ? GetDirectorySizeBytes(dir) : 0;
+        }
+
+        private string FetchHttpStringQuick(string url, int timeoutMs)
+        {
+            HttpWebRequest req = null;
+            try
+            {
+                req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Qinstall/" + CurrentAppVersion;
+                req.Accept = "application/vnd.github+json, application/json, */*";
+                req.AllowAutoRedirect = true;
+                req.Timeout = timeoutMs;
+                req.ReadWriteTimeout = timeoutMs;
+                RegisterRequest(req);
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (Stream s = resp.GetResponseStream())
+                using (StreamReader sr = new StreamReader(s, Encoding.UTF8))
+                {
+                    return sr.ReadToEnd();
+                }
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                UnregisterRequest(req);
+            }
+        }
+
+        private string ResolveRedirectFinalUrl(string url, int timeoutMs)
+        {
+            HttpWebRequest req = null;
+            try
+            {
+                req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "HEAD";
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Qinstall/" + CurrentAppVersion;
+                req.AllowAutoRedirect = true;
+                req.Timeout = timeoutMs;
+                RegisterRequest(req);
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                {
+                    return resp.ResponseUri != null ? resp.ResponseUri.AbsoluteUri : null;
+                }
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                UnregisterRequest(req);
+            }
+        }
+
+        private static int ExtractX64DependenciesFromZip(string zipPath, string targetDepsDir)
+        {
+            int count = 0;
+            Directory.CreateDirectory(targetDepsDir);
+            using (ZipArchive archive = ZipFile.OpenRead(zipPath))
+            {
+                for (int i = 0; i < archive.Entries.Count; i++)
+                {
+                    ZipArchiveEntry entry = archive.Entries[i];
+                    string fullName = (entry.FullName ?? string.Empty).Replace('\\', '/');
+                    string ext = Path.GetExtension(fullName).ToLowerInvariant();
+                    if (ext != ".appx" && ext != ".msix") continue;
+
+                    bool isX64 = fullName.IndexOf("x64/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 fullName.IndexOf("_x64", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 fullName.IndexOf(".x64.", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (!isX64) continue;
+
+                    string fileName = Path.GetFileName(fullName);
+                    if (string.IsNullOrEmpty(fileName)) continue;
+                    string destFile = Path.Combine(targetDepsDir, fileName);
+                    entry.ExtractToFile(destFile, true);
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        public async Task<bool> DownloadWingetOfflineKitAsync(Action<int> onProgress)
+        {
+            string stageRoot = Path.Combine(Path.GetTempPath(), "Qinstall_winget_dl_" + Guid.NewGuid().ToString("N").Substring(0, 6));
+            string stageDeps = Path.Combine(stageRoot, "deps");
+            try
+            {
+                Directory.CreateDirectory(stageDeps);
+                EmitLog("[*] Preparando kit completo de Winget + dependencias oficiales (VCLibs + UI.Xaml / WindowsAppRuntime)...");
+                ReportDownloadPct(5, onProgress);
+
+                string bundleUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle";
+                string depsZipUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/DesktopAppInstaller_Dependencies.zip";
+                string licenseUrl = null;
+
+                // Consultar API oficial de microsoft/winget-cli para obtener tambien License1.xml (clave para Windows LTSC / Server)
+                string releaseJson = await Task.Run(delegate
+                {
+                    return FetchHttpStringQuick("https://api.github.com/repos/microsoft/winget-cli/releases/latest", 8000);
+                });
+                if (!string.IsNullOrEmpty(releaseJson))
+                {
+                    try
+                    {
+                        JavaScriptSerializer ser = new JavaScriptSerializer();
+                        Dictionary<string, object> rel = ser.Deserialize<Dictionary<string, object>>(releaseJson);
+                        if (rel != null && rel.ContainsKey("assets"))
+                        {
+                            System.Collections.IEnumerable assets = rel["assets"] as System.Collections.IEnumerable;
+                            if (assets != null && !(assets is string))
+                            {
+                                foreach (object aObj in assets)
+                                {
+                                    Dictionary<string, object> a = aObj as Dictionary<string, object>;
+                                    if (a == null) continue;
+                                    string name = a.ContainsKey("name") && a["name"] != null ? a["name"].ToString() : string.Empty;
+                                    string dl = a.ContainsKey("browser_download_url") && a["browser_download_url"] != null ? a["browser_download_url"].ToString() : string.Empty;
+                                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(dl)) continue;
+
+                                    if (name.EndsWith(".msixbundle", StringComparison.OrdinalIgnoreCase)) bundleUrl = dl;
+                                    else if (name.Equals("DesktopAppInstaller_Dependencies.zip", StringComparison.OrdinalIgnoreCase)) depsZipUrl = dl;
+                                    else if (name.EndsWith("License1.xml", StringComparison.OrdinalIgnoreCase)) licenseUrl = dl;
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (_cancelRequested) return false;
+
+                // 1. Descargar dependencias oficiales x64
+                string depsZipPath = Path.Combine(stageRoot, "DesktopAppInstaller_Dependencies.zip");
+                EmitLog("[*] Descargando dependencias base de Winget (x64)...");
+                bool gotDepsZip = await DownloadFileAsync(depsZipUrl, depsZipPath, delegate(int p)
+                {
+                    ReportDownloadPct(5 + (p * 45) / 100, onProgress);
+                });
+
+                int extractedDeps = 0;
+                if (gotDepsZip && File.Exists(depsZipPath))
+                {
+                    try
+                    {
+                        extractedDeps = ExtractX64DependenciesFromZip(depsZipPath, stageDeps);
+                    }
+                    catch (Exception zex)
+                    {
+                        EmitLog("[!] Aviso extrayendo Dependencies.zip: " + zex.Message);
+                    }
+                    TryDeleteFile(depsZipPath);
+                }
+
+                // Respaldo directo Microsoft + NuGet si GitHub Dependencies.zip fallo
+                if (extractedDeps < 2 && !_cancelRequested)
+                {
+                    EmitLog("[*] Usando enlaces de respaldo directos para VCLibs 14 y Microsoft.UI.Xaml 2.8...");
+                    string vcPath = Path.Combine(stageDeps, "Microsoft.VCLibs.x64.14.00.Desktop.appx");
+                    bool okVc = await DownloadFileAsync("https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx", vcPath);
+                    string nugetZip = Path.Combine(stageRoot, "uixaml.zip");
+                    bool okXamlZip = await DownloadFileAsync("https://www.nuget.org/api/v2/package/Microsoft.UI.Xaml/2.8.6", nugetZip);
+                    if (okXamlZip && File.Exists(nugetZip))
+                    {
+                        try { extractedDeps += ExtractX64DependenciesFromZip(nugetZip, stageDeps); } catch { }
+                        TryDeleteFile(nugetZip);
+                    }
+                    if (okVc && File.Exists(vcPath)) extractedDeps++;
+                }
+
+                if (_cancelRequested) return false;
+
+                // 2. Descargar paquete principal Microsoft.DesktopAppInstaller.msixbundle
+                string stageBundle = Path.Combine(stageRoot, "Microsoft.DesktopAppInstaller.msixbundle");
+                EmitLog("[*] Descargando paquete principal Microsoft.DesktopAppInstaller (.msixbundle)...");
+                bool gotBundle = await DownloadFileAsync(bundleUrl, stageBundle, delegate(int p)
+                {
+                    ReportDownloadPct(50 + (p * 42) / 100, onProgress);
+                });
+                if ((!gotBundle || !File.Exists(stageBundle)) && !_cancelRequested)
+                {
+                    EmitLog("[*] Probando enlace oficial alternativo aka.ms/getwinget...");
+                    gotBundle = await DownloadFileAsync("https://aka.ms/getwinget", stageBundle, delegate(int p)
+                    {
+                        ReportDownloadPct(50 + (p * 42) / 100, onProgress);
+                    });
+                }
+
+                if (!gotBundle || !File.Exists(stageBundle) || _cancelRequested)
+                {
+                    EmitLog("[X] No se pudo descargar Microsoft.DesktopAppInstaller.msixbundle.");
+                    return false;
+                }
+
+                // 3. Descargar archivo de licencia oficial si esta disponible (para aprovisionamiento offline / LTSC)
+                string stageLicense = Path.Combine(stageRoot, "License1.xml");
+                if (!string.IsNullOrEmpty(licenseUrl) && !_cancelRequested)
+                {
+                    await DownloadFileAsync(licenseUrl, stageLicense);
+                }
+
+                // 4. Guardar copia reutilizable en local\winget\ del pendrive/unidad si hay espacio suficiente (>= 200 MB libres)
+                string targetKitDir = GetWingetOfflineKitDirectory();
+                bool canPersistToUsb = true;
+                try
+                {
+                    string root = Path.GetPathRoot(targetKitDir);
+                    if (!string.IsNullOrEmpty(root))
+                    {
+                        DriveInfo di = new DriveInfo(root);
+                        if (di.IsReady && di.AvailableFreeSpace < (200L * 1024L * 1024L))
+                        {
+                            canPersistToUsb = false;
+                            EmitLog("[!] Espacio libre ajustado en el USB (< 200 MB): instalando Winget desde %TEMP% sin ocupar espacio permanente.");
+                        }
+                    }
+                }
+                catch { }
+
+                string finalKitDir = canPersistToUsb ? targetKitDir : Path.Combine(Path.GetTempPath(), "Qinstall", "winget_kit");
+                try
+                {
+                    string finalDeps = Path.Combine(finalKitDir, "deps");
+                    if (Directory.Exists(finalKitDir)) Directory.Delete(finalKitDir, true);
+                    Directory.CreateDirectory(finalDeps);
+
+                    File.Copy(stageBundle, Path.Combine(finalKitDir, "Microsoft.DesktopAppInstaller.msixbundle"), true);
+                    if (File.Exists(stageLicense))
+                    {
+                        File.Copy(stageLicense, Path.Combine(finalKitDir, "License1.xml"), true);
+                    }
+                    string[] depFiles = Directory.GetFiles(stageDeps);
+                    for (int i = 0; i < depFiles.Length; i++)
+                    {
+                        File.Copy(depFiles[i], Path.Combine(finalDeps, Path.GetFileName(depFiles[i])), true);
+                    }
+                    if (canPersistToUsb)
+                    {
+                        EmitLog("[OK] Kit completo de Winget guardado en local\\winget\\ (listo para reutilizar sin Internet en otros equipos).");
+                    }
+                }
+                catch (Exception pex)
+                {
+                    EmitLog("[!] No se pudo guardar copia en local\\winget\\ (" + pex.Message + "); usando copia temporal.");
+                    string fallbackKit = Path.Combine(Path.GetTempPath(), "Qinstall", "winget_kit");
+                    string fallbackDeps = Path.Combine(fallbackKit, "deps");
+                    Directory.CreateDirectory(fallbackDeps);
+                    File.Copy(stageBundle, Path.Combine(fallbackKit, "Microsoft.DesktopAppInstaller.msixbundle"), true);
+                    if (File.Exists(stageLicense)) File.Copy(stageLicense, Path.Combine(fallbackKit, "License1.xml"), true);
+                    string[] depFiles = Directory.GetFiles(stageDeps);
+                    for (int i = 0; i < depFiles.Length; i++)
+                    {
+                        File.Copy(depFiles[i], Path.Combine(fallbackDeps, Path.GetFileName(depFiles[i])), true);
+                    }
+                }
+
+                ReportDownloadPct(100, onProgress);
+                return true;
+            }
+            finally
+            {
+                try { if (Directory.Exists(stageRoot)) Directory.Delete(stageRoot, true); } catch { }
+            }
+        }
+
         public async Task<bool> InstallWingetAsync()
         {
-            EmitLog("[*] Descargando App Installer (Winget) desde Microsoft...");
-            string tempDir = Path.Combine(Path.GetTempPath(), "Qinstall");
-            Directory.CreateDirectory(tempDir);
-            string bundlePath = Path.Combine(tempDir, "Microsoft.DesktopAppInstaller.msixbundle");
+            InvalidateWingetCache();
+            string kitDir = FindExistingWingetKitDirectory();
+            bool online = await CheckInternetAsync();
 
-            bool downloaded = await DownloadFileAsync("https://aka.ms/getwinget", bundlePath);
-            if (!downloaded)
+            if (string.IsNullOrEmpty(kitDir))
             {
-                EmitLog("[X] No se pudo descargar Winget.");
+                if (!online)
+                {
+                    EmitLog("[X] No hay conexion a Internet ni existe todavia el kit offline en local\\winget\\.");
+                    return false;
+                }
+                bool okKit = await DownloadWingetOfflineKitAsync(null);
+                if (!okKit || _cancelRequested) return false;
+                kitDir = FindExistingWingetKitDirectory();
+                if (string.IsNullOrEmpty(kitDir))
+                {
+                    string tempKit = Path.Combine(Path.GetTempPath(), "Qinstall", "winget_kit");
+                    if (Directory.Exists(tempKit)) kitDir = tempKit;
+                }
+            }
+            else
+            {
+                EmitLog("[*] Kit offline de Winget detectado en: " + kitDir);
+            }
+
+            if (string.IsNullOrEmpty(kitDir) || !Directory.Exists(kitDir))
+            {
+                EmitLog("[X] No se encontraron los archivos de instalacion de Winget.");
                 return false;
             }
 
-            EmitLog("[*] Instalando Winget con PowerShell...");
-            string psArgs = "-NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxPackage -Path '" + bundlePath.Replace("'", "''") + "'\"";
-            StringBuilder outBuf = new StringBuilder();
-            int code = await RunProcessAsync("powershell.exe", psArgs, outBuf);
-            TryDeleteFile(bundlePath);
-
-            if (code == 0)
+            // Copiar siempre a %TEMP% local en C:\ para evitar bloqueos 0x80070005 de AppxDeploymentServer sobre unidades USB FAT32/exFAT
+            string localStage = Path.Combine(Path.GetTempPath(), "Qinstall_wg_stage_" + Guid.NewGuid().ToString("N").Substring(0, 6));
+            try
             {
-                EmitLog("[OK] Winget instalado correctamente.");
-                return true;
+                string stageDeps = Path.Combine(localStage, "deps");
+                Directory.CreateDirectory(stageDeps);
+                string srcBundle = Path.Combine(kitDir, "Microsoft.DesktopAppInstaller.msixbundle");
+                string dstBundle = Path.Combine(localStage, "Microsoft.DesktopAppInstaller.msixbundle");
+                File.Copy(srcBundle, dstBundle, true);
+
+                string srcLicense = Path.Combine(kitDir, "License1.xml");
+                string dstLicense = Path.Combine(localStage, "License1.xml");
+                if (File.Exists(srcLicense)) File.Copy(srcLicense, dstLicense, true);
+
+                string srcDeps = Path.Combine(kitDir, "deps");
+                if (Directory.Exists(srcDeps))
+                {
+                    string[] dFiles = Directory.GetFiles(srcDeps);
+                    for (int i = 0; i < dFiles.Length; i++)
+                    {
+                        File.Copy(dFiles[i], Path.Combine(stageDeps, Path.GetFileName(dFiles[i])), true);
+                    }
+                }
+
+                EmitLog("[*] Instalando dependencias (VCLibs / UI.Xaml / AppRuntime) y App Installer (Winget)...");
+                string escapedStage = localStage.Replace("'", "''");
+                string psScript =
+                    "$ErrorActionPreference = 'Continue'; " +
+                    "$stage = '" + escapedStage + "'; " +
+                    "$bundle = Join-Path $stage 'Microsoft.DesktopAppInstaller.msixbundle'; " +
+                    "$lic = Join-Path $stage 'License1.xml'; " +
+                    "$deps = @(Get-ChildItem -Path (Join-Path $stage 'deps') -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.appx','.msix' } | Sort-Object Name | ForEach-Object { $_.FullName }); " +
+                    "foreach ($d in $deps) { " +
+                    "  Write-Output ('Instalando dependencia: ' + [System.IO.Path]::GetFileName($d)); " +
+                    "  try { Add-AppxPackage -Path $d -ForceApplicationShutdown -ErrorAction Stop } catch { Write-Output ('Aviso dep: ' + $_.Exception.Message) } " +
+                    "} " +
+                    "$appxOk = $false; " +
+                    "try { " +
+                    "  if ($deps.Count -gt 0) { Add-AppxPackage -Path $bundle -DependencyPath $deps -ForceApplicationShutdown -ErrorAction Stop } " +
+                    "  else { Add-AppxPackage -Path $bundle -ForceApplicationShutdown -ErrorAction Stop } " +
+                    "  $appxOk = $true; Write-Output 'Add-AppxPackage completado.'; " +
+                    "} catch { Write-Output ('Aviso Add-AppxPackage: ' + $_.Exception.Message) } " +
+                    "$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); " +
+                    "if ($isAdmin -and (-not $appxOk -or (Test-Path $lic))) { " +
+                    "  Write-Output 'Aprovisionando Winget a nivel de sistema (DISM / LTSC / Admin)...'; " +
+                    "  $dismArgs = @('/Online', '/Add-ProvisionedAppxPackage', ('/PackagePath:' + $bundle)); " +
+                    "  foreach ($d in $deps) { $dismArgs += ('/DependencyPackagePath:' + $d) } " +
+                    "  if (Test-Path $lic) { $dismArgs += ('/LicensePath:' + $lic); $dismArgs += '/Region:all' } else { $dismArgs += '/SkipLicense' } " +
+                    "  $p = Start-Process -FilePath 'dism.exe' -ArgumentList $dismArgs -Wait -NoNewWindow -PassThru; " +
+                    "  Write-Output ('DISM finalizo con codigo: ' + $p.ExitCode); " +
+                    "  try { Add-AppxPackage -RegisterByFamilyName -MainPackage 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe' -ErrorAction SilentlyContinue } catch {} " +
+                    "}";
+
+                string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(psScript));
+                StringBuilder outBuf = new StringBuilder();
+                await RunProcessAsync("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encoded, outBuf);
+
+                InvalidateWingetCache();
+                string installedVer = GetWingetVersion();
+                if (!string.IsNullOrEmpty(installedVer))
+                {
+                    EmitLog("[OK] Winget instalado y verificado correctamente (" + installedVer + ").");
+                    return true;
+                }
+
+                // Respaldo final online con Microsoft.WinGet.Client (Repair-WinGetPackageManager) si el sistema bloqueo MSIX directo
+                if (online && !_cancelRequested)
+                {
+                    EmitLog("[*] Aplicando reparacion oficial Microsoft.WinGet.Client (Repair-WinGetPackageManager)...");
+                    string repairScript =
+                        "$ProgressPreference = 'SilentlyContinue'; " +
+                        "Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null; " +
+                        "Install-Module -Name Microsoft.WinGet.Client -Force -AllowClobber -Repository PSGallery -ErrorAction SilentlyContinue; " +
+                        "Repair-WinGetPackageManager -AllUsers -Force -Latest -ErrorAction SilentlyContinue";
+                    string encRepair = Convert.ToBase64String(Encoding.Unicode.GetBytes(repairScript));
+                    StringBuilder repOut = new StringBuilder();
+                    await RunProcessAsync("powershell.exe", "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encRepair, repOut);
+
+                    InvalidateWingetCache();
+                    installedVer = GetWingetVersion();
+                    if (!string.IsNullOrEmpty(installedVer))
+                    {
+                        EmitLog("[OK] Winget reparado y verificado correctamente (" + installedVer + ").");
+                        return true;
+                    }
+                }
+
+                EmitLog("[X] Windows completo el despliegue pero winget.exe aun no responde. Verifica que Windows 10 sea 1809+ y que el servicio AppXSvc este activo.");
+                return false;
+            }
+            finally
+            {
+                try { if (Directory.Exists(localStage)) Directory.Delete(localStage, true); } catch { }
+            }
+        }
+
+        public Task<SelfUpdateInfo> CheckSelfUpdateAsync()
+        {
+            return Task.Run(delegate
+            {
+                SelfUpdateInfo info = new SelfUpdateInfo();
+                info.Available = false;
+                info.CurrentVersion = CurrentAppVersion;
+                info.LatestVersion = CurrentAppVersion;
+                info.TagName = "v" + CurrentAppVersion;
+                info.ReleaseUrl = "https://github.com/" + GithubRepoSlug + "/releases/latest";
+                info.Notes = string.Empty;
+
+                try
+                {
+                    string apiJson = FetchHttpStringQuick("https://api.github.com/repos/" + GithubRepoSlug + "/releases/latest", 8000);
+                    if (!string.IsNullOrEmpty(apiJson))
+                    {
+                        JavaScriptSerializer ser = new JavaScriptSerializer();
+                        Dictionary<string, object> rel = ser.Deserialize<Dictionary<string, object>>(apiJson);
+                        if (rel != null)
+                        {
+                            string tag = rel.ContainsKey("tag_name") && rel["tag_name"] != null ? rel["tag_name"].ToString().Trim() : string.Empty;
+                            string htmlUrl = rel.ContainsKey("html_url") && rel["html_url"] != null ? rel["html_url"].ToString().Trim() : string.Empty;
+                            string body = rel.ContainsKey("body") && rel["body"] != null ? rel["body"].ToString().Trim() : string.Empty;
+                            string zipUrl = null;
+
+                            if (rel.ContainsKey("assets"))
+                            {
+                                System.Collections.IEnumerable assets = rel["assets"] as System.Collections.IEnumerable;
+                                if (assets != null && !(assets is string))
+                                {
+                                    foreach (object aObj in assets)
+                                    {
+                                        Dictionary<string, object> a = aObj as Dictionary<string, object>;
+                                        if (a == null) continue;
+                                        string aName = a.ContainsKey("name") && a["name"] != null ? a["name"].ToString() : string.Empty;
+                                        string aUrl = a.ContainsKey("browser_download_url") && a["browser_download_url"] != null ? a["browser_download_url"].ToString() : string.Empty;
+                                        if (aName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(aUrl))
+                                        {
+                                            zipUrl = aUrl;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!string.IsNullOrEmpty(tag))
+                            {
+                                string cleanLatest = NormalizeVersionDisplay(tag);
+                                info.TagName = tag;
+                                info.LatestVersion = cleanLatest;
+                                if (!string.IsNullOrEmpty(htmlUrl)) info.ReleaseUrl = htmlUrl;
+                                info.Notes = body;
+                                info.DownloadUrl = !string.IsNullOrEmpty(zipUrl)
+                                    ? zipUrl
+                                    : string.Format("https://github.com/{0}/releases/download/{1}/qInstall-{1}-win-x64-portable.zip", GithubRepoSlug, tag);
+                                info.Available = IsVersionOlder(CurrentAppVersion, cleanLatest);
+                                return info;
+                            }
+                        }
+                    }
+
+                    // Respaldo sin limite de cuota API: resolver redireccion HTTP de /releases/latest -> /releases/tag/vX.Y.Z
+                    string finalUrl = ResolveRedirectFinalUrl("https://github.com/" + GithubRepoSlug + "/releases/latest", 8000);
+                    if (!string.IsNullOrEmpty(finalUrl))
+                    {
+                        int tagIdx = finalUrl.IndexOf("/releases/tag/", StringComparison.OrdinalIgnoreCase);
+                        if (tagIdx >= 0)
+                        {
+                            string tag = finalUrl.Substring(tagIdx + 14).Trim().Trim('/');
+                            if (!string.IsNullOrEmpty(tag))
+                            {
+                                string cleanLatest = NormalizeVersionDisplay(tag);
+                                info.TagName = tag;
+                                info.LatestVersion = cleanLatest;
+                                info.ReleaseUrl = finalUrl;
+                                info.DownloadUrl = string.Format("https://github.com/{0}/releases/download/{1}/qInstall-{1}-win-x64-portable.zip", GithubRepoSlug, tag);
+                                info.Available = IsVersionOlder(CurrentAppVersion, cleanLatest);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                return info;
+            });
+        }
+
+        public async Task<bool> PerformSelfUpdateAsync(SelfUpdateInfo info, Action<int> onProgress)
+        {
+            if (info == null || string.IsNullOrWhiteSpace(info.DownloadUrl))
+            {
+                EmitLog("[X] No se encontro la URL del paquete de actualizacion de qInstall.");
+                return false;
             }
 
-            EmitLog("[X] Error instalando Winget (codigo " + code + ").");
-            return false;
+            string stageRoot = Path.Combine(Path.GetTempPath(), "Qinstall_selfupd_" + Guid.NewGuid().ToString("N").Substring(0, 6));
+            string zipPath = Path.Combine(stageRoot, "qInstall_update.zip");
+            string extractDir = Path.Combine(stageRoot, "extracted");
+
+            try
+            {
+                Directory.CreateDirectory(extractDir);
+                EmitLog("[*] Descargando nueva version de qInstall (" + info.TagName + ") desde GitHub Releases...");
+                ReportDownloadPct(5, onProgress);
+
+                bool downloaded = await DownloadFileAsync(info.DownloadUrl, zipPath, delegate(int p)
+                {
+                    ReportDownloadPct(5 + (p * 75) / 100, onProgress);
+                });
+
+                if (!downloaded || !File.Exists(zipPath) || new FileInfo(zipPath).Length < 50 * 1024)
+                {
+                    EmitLog("[X] No se pudo descargar el paquete portable de qInstall desde GitHub Releases.");
+                    return false;
+                }
+
+                ReportDownloadPct(85, onProgress);
+                EmitLog("[*] Extrayendo y verificando archivos de qInstall " + info.TagName + "...");
+                ZipFile.ExtractToDirectory(zipPath, extractDir);
+
+                string payloadRoot = extractDir;
+                string nestedDir = Path.Combine(extractDir, "qInstall");
+                if (Directory.Exists(nestedDir) && File.Exists(Path.Combine(nestedDir, "Qinstall.exe")))
+                {
+                    payloadRoot = nestedDir;
+                }
+                else if (!File.Exists(Path.Combine(payloadRoot, "Qinstall.exe")))
+                {
+                    string[] subDirs = Directory.GetDirectories(extractDir);
+                    for (int i = 0; i < subDirs.Length; i++)
+                    {
+                        if (File.Exists(Path.Combine(subDirs[i], "Qinstall.exe")))
+                        {
+                            payloadRoot = subDirs[i];
+                            break;
+                        }
+                    }
+                }
+
+                string newExePath = Path.Combine(payloadRoot, "Qinstall.exe");
+                if (!File.Exists(newExePath))
+                {
+                    EmitLog("[X] El paquete descargado no contiene Qinstall.exe.");
+                    return false;
+                }
+
+                // Fusion inteligente de apps.json: actualizar catalogo oficial conservando apps personalizadas del usuario
+                string appBaseDir = AppCatalog.GetAppBaseDirectory();
+                MergeUpdatedCatalogPreservingCustomApps(Path.Combine(payloadRoot, "apps.json"), Path.Combine(appBaseDir, "apps.json"));
+
+                // Copiar ui\ y office\ nuevos sin tocar profiles.json ni local\
+                string newUi = Path.Combine(payloadRoot, "ui");
+                if (Directory.Exists(newUi))
+                {
+                    CopyUpdateDirectoryOverwrite(newUi, Path.Combine(appBaseDir, "ui"));
+                }
+                string newOffice = Path.Combine(payloadRoot, "office");
+                if (Directory.Exists(newOffice))
+                {
+                    CopyUpdateDirectoryOverwrite(newOffice, Path.Combine(appBaseDir, "office"));
+                }
+                string[] dlls = new[] { "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll" };
+                for (int i = 0; i < dlls.Length; i++)
+                {
+                    string sDll = Path.Combine(payloadRoot, dlls[i]);
+                    if (File.Exists(sDll))
+                    {
+                        try { File.Copy(sDll, Path.Combine(appBaseDir, dlls[i]), true); } catch { }
+                    }
+                }
+
+                ReportDownloadPct(96, onProgress);
+
+                string currentExe = Process.GetCurrentProcess().MainModule.FileName;
+                string targetExe = Path.Combine(appBaseDir, Path.GetFileName(currentExe));
+                string oldBackupExe = targetExe + ".old";
+
+                // Intentar hot-swap atomico en caliente (renombrar ejecutable actual a .old y copiar el nuevo)
+                bool swappedInPlace = false;
+                try
+                {
+                    TryDeleteFile(oldBackupExe);
+                    File.Move(targetExe, oldBackupExe);
+                    File.Copy(newExePath, targetExe, true);
+                    swappedInPlace = true;
+                }
+                catch
+                {
+                    swappedInPlace = false;
+                }
+
+                ReportDownloadPct(100, onProgress);
+
+                if (swappedInPlace)
+                {
+                    EmitLog("[OK] qInstall actualizado a " + info.TagName + ". Reiniciando aplicacion...");
+                    try { Directory.Delete(stageRoot, true); } catch { }
+                    ProcessStartInfo relaunchPsi = new ProcessStartInfo();
+                    relaunchPsi.FileName = targetExe;
+                    relaunchPsi.WorkingDirectory = appBaseDir;
+                    relaunchPsi.UseShellExecute = true;
+                    Process.Start(relaunchPsi);
+                    return true;
+                }
+
+                // Respaldo para unidades FAT32 que bloquean renombrar un .exe en uso: script PowerShell que espera el cierre y relanza
+                int myPid = Process.GetCurrentProcess().Id;
+                string psSwap = string.Format(
+                    "Wait-Process -Id {0} -Timeout 15 -ErrorAction SilentlyContinue; " +
+                    "Start-Sleep -Milliseconds 400; " +
+                    "Copy-Item -Path '{1}' -Destination '{2}' -Force; " +
+                    "Remove-Item -Path '{3}' -Recurse -Force -ErrorAction SilentlyContinue; " +
+                    "Start-Process -FilePath '{2}' -WorkingDirectory '{4}'",
+                    myPid,
+                    newExePath.Replace("'", "''"),
+                    targetExe.Replace("'", "''"),
+                    stageRoot.Replace("'", "''"),
+                    appBaseDir.Replace("'", "''"));
+                string encSwap = Convert.ToBase64String(Encoding.Unicode.GetBytes(psSwap));
+                ProcessStartInfo swapPsi = new ProcessStartInfo("powershell.exe", "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand " + encSwap);
+                swapPsi.UseShellExecute = false;
+                swapPsi.CreateNoWindow = true;
+                Process.Start(swapPsi);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                EmitLog("[X] Error aplicando auto-actualizacion de qInstall: " + ex.Message);
+                try { if (Directory.Exists(stageRoot)) Directory.Delete(stageRoot, true); } catch { }
+                return false;
+            }
+        }
+
+        private static void MergeUpdatedCatalogPreservingCustomApps(string newAppsJsonPath, string localAppsJsonPath)
+        {
+            try
+            {
+                if (!File.Exists(newAppsJsonPath)) return;
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                AppCatalog incoming = ser.Deserialize<AppCatalog>(File.ReadAllText(newAppsJsonPath, Encoding.UTF8));
+                if (incoming == null || incoming.Apps == null || incoming.Apps.Count == 0) return;
+
+                if (File.Exists(localAppsJsonPath))
+                {
+                    try
+                    {
+                        AppCatalog existing = ser.Deserialize<AppCatalog>(File.ReadAllText(localAppsJsonPath, Encoding.UTF8));
+                        if (existing != null && existing.Apps != null)
+                        {
+                            HashSet<string> officialIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            for (int i = 0; i < incoming.Apps.Count; i++)
+                            {
+                                if (!string.IsNullOrEmpty(incoming.Apps[i].Id)) officialIds.Add(incoming.Apps[i].Id);
+                            }
+                            for (int i = 0; i < existing.Apps.Count; i++)
+                            {
+                                AppItem userApp = existing.Apps[i];
+                                if (userApp != null && !string.IsNullOrEmpty(userApp.Id) && !officialIds.Contains(userApp.Id))
+                                {
+                                    incoming.Apps.Add(userApp);
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                AppCatalog.Save(incoming, localAppsJsonPath);
+            }
+            catch { }
+        }
+
+        private static void CopyUpdateDirectoryOverwrite(string srcDir, string dstDir)
+        {
+            Directory.CreateDirectory(dstDir);
+            string[] files = Directory.GetFiles(srcDir);
+            for (int i = 0; i < files.Length; i++)
+            {
+                string destFile = Path.Combine(dstDir, Path.GetFileName(files[i]));
+                try { File.Copy(files[i], destFile, true); } catch { }
+            }
+            string[] subDirs = Directory.GetDirectories(srcDir);
+            for (int i = 0; i < subDirs.Length; i++)
+            {
+                CopyUpdateDirectoryOverwrite(subDirs[i], Path.Combine(dstDir, Path.GetFileName(subDirs[i])));
+            }
         }
 
         public async Task<HashSet<string>> DetectInstalledAppKeysAsync(List<AppItem> apps)
@@ -2146,6 +3572,7 @@ namespace Qinstall
                     psi.RedirectStandardError = true;
                     psi.CreateNoWindow = true;
                     psi.StandardOutputEncoding = Encoding.UTF8;
+                    ConfigureWingetProcessStartInfo(psi);
 
                     using (Process p = Process.Start(psi))
                     {
@@ -2286,25 +3713,10 @@ namespace Qinstall
 
             if (looksAlreadyInstalled)
             {
-                if (upgradeIfExists && exitCode == -1978335135)
+                if (upgradeIfExists && exitCode != -1978335189)
                 {
                     EmitLog("[*] Ya estaba instalado. Comprobando actualizaciones para " + app.Name + "...");
-                    string upArgs = string.Format(
-                        "upgrade --id \"{0}\" --exact --source {1}{2} --accept-package-agreements --accept-source-agreements --disable-interactivity",
-                        app.Target.Trim(),
-                        pkgSource,
-                        silentFlag);
-                    StringBuilder upOutput = new StringBuilder();
-                    int upCode = await RunProcessAsync("winget", upArgs, upOutput);
-                    if (_cancelRequested)
-                    {
-                        return MakeResult(app, InstallStatus.Cancelled, "Cancelado por el usuario");
-                    }
-                    if (upCode == 0)
-                    {
-                        EmitLog("[OK] " + app.Name + " actualizado correctamente.");
-                        return MakeResult(app, InstallStatus.Success, "Actualizado a la ultima version");
-                    }
+                    return await UpgradeSingleAppAsync(app, silent);
                 }
 
                 EmitLog("[=] " + app.Name + " ya esta instalado y al dia.");
@@ -3065,6 +4477,7 @@ namespace Qinstall
                     psi.CreateNoWindow = true;
                     psi.StandardOutputEncoding = Encoding.UTF8;
                     psi.StandardErrorEncoding = Encoding.UTF8;
+                    ConfigureWingetProcessStartInfo(psi);
 
                     object bufLock = new object();
                     using (Process proc = new Process())
@@ -3240,6 +4653,7 @@ namespace Qinstall
 
     public class InstalledUpdateInfo
     {
+        public string Name { get; set; }
         public string Id { get; set; }
         public string CurrentVersion { get; set; }
         public string AvailableVersion { get; set; }
